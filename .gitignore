@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+*/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment & Secrets (TUYỆT ĐỐI KHÔNG COMMIT)
+.env
+.env.*
+!.env.example
+*.env
+*.local
+
+# Production Build Outputs
+dist/
+*/dist/
+dist-ssr/
+*/dist-ssr/
+build/
+*/build/
+
+# Database dumps & backups
+*.sql
+*.sqlite
+*.db
+
+# Logs
+logs/
+*.log
+
+# Editor & OS files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
