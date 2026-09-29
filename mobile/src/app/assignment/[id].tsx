@@ -48,7 +48,7 @@ const MODE_CONFIG: Record<
     color: '#F59E0B',
     bg: '#FEF3C7',
     actionText: 'Bắt đầu học thẻ',
-    routeSuffix: 'flashcards',
+    routeSuffix: 'learn',
   },
 };
 

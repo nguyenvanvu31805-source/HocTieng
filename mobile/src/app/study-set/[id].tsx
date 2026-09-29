@@ -533,7 +533,24 @@ export default function StudySetDetailScreen() {
           </View>
         )}
 
-        {/* Hàng nút hành động chuẩn bị cho bước tiếp theo */}
+        {/* Nút Chế độ Học (Learn Mode) - hiển thị khi có thẻ */}
+        {cards.length > 0 && (
+          <TouchableOpacity
+            style={styles.learnActionButton}
+            onPress={() => router.push(`/study-set/${id}/learn` as any)}
+            activeOpacity={0.8}>
+            <Text style={styles.learnActionIcon}>📚</Text>
+            <View style={styles.learnActionTextBox}>
+              <Text style={styles.learnActionTitle}>Học (Learn Mode)</Text>
+              <Text style={styles.learnActionSubtitle}>
+                Ghi nhớ định nghĩa từ vựng từng bước với phản hồi ngay
+              </Text>
+            </View>
+            <Text style={styles.learnActionArrow}>→</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Hàng nút hành động Flashcards & Luyện tập */}
         <View style={styles.actionButtonsRow}>
           <TouchableOpacity
             style={styles.primaryActionButton}
@@ -549,7 +566,7 @@ export default function StudySetDetailScreen() {
             }}
             activeOpacity={0.8}>
             <Text style={styles.primaryActionIcon}>🗂️</Text>
-            <Text style={styles.primaryActionText}>Học Flashcards</Text>
+            <Text style={styles.primaryActionText}>Flashcards</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1222,6 +1239,44 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginBottom: 12,
+  },
+  learnActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4255FF',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    marginBottom: 12,
+    shadowColor: '#4255FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  learnActionIcon: {
+    fontSize: 26,
+    marginRight: 12,
+  },
+  learnActionTextBox: {
+    flex: 1,
+  },
+  learnActionTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  learnActionSubtitle: {
+    color: '#E0E7FF',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  learnActionArrow: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '700',
+    marginLeft: 8,
   },
   primaryActionButton: {
     flex: 1,
