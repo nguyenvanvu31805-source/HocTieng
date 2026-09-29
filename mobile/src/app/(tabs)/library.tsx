@@ -1,8 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,6 +19,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { StudySet } from '@/types/studySet';
 import api from '@/services/api';
+import studySetService from '@/services/studySetService';
 import StudySetCard from '@/components/StudySetCard';
 
 type TabFilter = 'all' | 'my' | 'bookmarks';
@@ -28,6 +34,15 @@ export default function LibraryScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // Trạng thái modal tạo bộ học mới
+  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [formTitle, setFormTitle] = useState('');
+  const [formDescription, setFormDescription] = useState('');
+  const [formCategory, setFormCategory] = useState('');
+  const [formVisibility, setFormVisibility] = useState<'PUBLIC' | 'PRIVATE'>('PUBLIC');
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
 
   const fetchStudySets = useCallback(
     async (isRefresh = false) => {
@@ -102,10 +117,69 @@ export default function LibraryScreen() {
     setSearchQuery('');
   };
 
+  const handleOpenCreateModal = () => {
+    setFormTitle('');
+    setFormDescription('');
+    setFormCategory('');
+    setFormVisibility('PUBLIC');
+    setFormError('');
+    setCreateModalVisible(true);
+  };
+
+  const handleCreateSubmit = async () => {
+    const trimmedTitle = formTitle.trim();
+    if (!trimmedTitle) {
+      setFormError('Vui lòng nhập tên bộ học.');
+      return;
+    }
+
+    setSubmitting(true);
+    setFormError('');
+
+    try {
+      const response = await studySetService.createStudySet({
+        title: trimmedTitle,
+        description: formDescription.trim() || null,
+        category: formCategory.trim() || null,
+        visibility: formVisibility,
+      });
+
+      if (response.success && response.data) {
+        setCreateModalVisible(false);
+        fetchStudySets(true);
+        Alert.alert('Thành công', 'Đã tạo bộ học mới!');
+        router.push(`/study-set/${response.data.set_id}` as any);
+      } else {
+        setFormError(response.message || 'Không thể tạo bộ học. Vui lòng thử lại.');
+      }
+    } catch (error: any) {
+      const msg =
+        error?.status === 401
+          ? 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'
+          : error?.data?.message ||
+            error?.message ||
+            'Không thể tạo bộ học. Vui lòng thử lại.';
+      setFormError(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // Header của FlatList
   const renderHeader = () => (
     <View style={styles.headerContainer}>
-      <Text style={styles.pageTitle}>Thư viện</Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.pageTitle}>Thư viện</Text>
+        {isAuthenticated && (
+          <TouchableOpacity
+            style={styles.createButton}
+            onPress={handleOpenCreateModal}
+            activeOpacity={0.8}>
+            <Text style={styles.createButtonIcon}>＋</Text>
+            <Text style={styles.createButtonText}>Tạo bộ học</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {/* Ô tìm kiếm */}
       <View style={styles.searchBox}>
@@ -246,6 +320,133 @@ export default function LibraryScreen() {
         }
         showsVerticalScrollIndicator={false}
       />
+
+      {/* Modal Tạo Bộ học mới */}
+      <Modal
+        visible={createModalVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          if (!submitting) setCreateModalVisible(false);
+        }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Tạo bộ học mới</Text>
+              <Text style={styles.modalSubtitle}>
+                Nhập thông tin cơ bản để tạo bộ từ vựng mới của bạn.
+              </Text>
+            </View>
+
+            {!!formError && (
+              <View style={styles.formErrorBox}>
+                <Text style={styles.formErrorText}>{formError}</Text>
+              </View>
+            )}
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={styles.inputLabel}>
+                Tên bộ học <Text style={styles.requiredStar}>*</Text>
+              </Text>
+              <TextInput
+                style={styles.formInput}
+                placeholder="Ví dụ: Từ vựng IELTS 7.0, Unit 1..."
+                placeholderTextColor="#939BB4"
+                value={formTitle}
+                onChangeText={setFormTitle}
+                editable={!submitting}
+              />
+
+              <Text style={styles.inputLabel}>Mô tả (tùy chọn)</Text>
+              <TextInput
+                style={[styles.formInput, styles.formInputMulti]}
+                placeholder="Ví dụ: Tổng hợp từ vựng quan trọng theo chủ đề..."
+                placeholderTextColor="#939BB4"
+                value={formDescription}
+                onChangeText={setFormDescription}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+                editable={!submitting}
+              />
+
+              <Text style={styles.inputLabel}>Chủ đề (tùy chọn)</Text>
+              <TextInput
+                style={styles.formInput}
+                placeholder="Ví dụ: Tiếng Anh, Từ vựng, Công nghệ..."
+                placeholderTextColor="#939BB4"
+                value={formCategory}
+                onChangeText={setFormCategory}
+                editable={!submitting}
+              />
+
+              <Text style={styles.inputLabel}>Quyền riêng tư</Text>
+              <View style={styles.visibilityRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.visibilityBtn,
+                    formVisibility === 'PUBLIC' && styles.visibilityBtnActive,
+                  ]}
+                  onPress={() => setFormVisibility('PUBLIC')}
+                  disabled={submitting}
+                  activeOpacity={0.7}>
+                  <Text
+                    style={[
+                      styles.visibilityBtnText,
+                      formVisibility === 'PUBLIC' && styles.visibilityBtnTextActive,
+                    ]}>
+                    🌐 Công khai
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.visibilityBtn,
+                    formVisibility === 'PRIVATE' && styles.visibilityBtnActive,
+                  ]}
+                  onPress={() => setFormVisibility('PRIVATE')}
+                  disabled={submitting}
+                  activeOpacity={0.7}>
+                  <Text
+                    style={[
+                      styles.visibilityBtnText,
+                      formVisibility === 'PRIVATE' && styles.visibilityBtnTextActive,
+                    ]}>
+                    🔒 Riêng tư
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalButtonsRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setCreateModalVisible(false)}
+                disabled={submitting}
+                activeOpacity={0.7}>
+                <Text style={styles.modalCancelBtnText}>Hủy</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalSubmitBtn, submitting && styles.modalSubmitBtnDisabled]}
+                onPress={handleCreateSubmit}
+                disabled={submitting}
+                activeOpacity={0.8}>
+                {submitting ? (
+                  <View style={styles.submitLoadingRow}>
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <Text style={styles.modalSubmitBtnText}>Đang tạo...</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.modalSubmitBtnText}>Tạo bộ học</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -263,11 +464,40 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     marginBottom: 16,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
   pageTitle: {
     fontSize: 26,
     fontWeight: '800',
     color: '#2E3856',
-    marginBottom: 16,
+  },
+  createButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4255FF',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    shadowColor: '#4255FF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  createButtonIcon: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    marginRight: 4,
+  },
+  createButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
   searchBox: {
     flexDirection: 'row',
@@ -366,4 +596,143 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 30,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    maxHeight: '85%',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalHeader: {
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#2E3856',
+    marginBottom: 6,
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: '#60646C',
+    lineHeight: 18,
+  },
+  formErrorBox: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 12,
+  },
+  formErrorText: {
+    color: '#DC2626',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#2E3856',
+    marginBottom: 6,
+    marginTop: 10,
+  },
+  requiredStar: {
+    color: '#DC2626',
+  },
+  formInput: {
+    backgroundColor: '#F8F9FD',
+    borderWidth: 1.5,
+    borderColor: '#E8ECF4',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#2E3856',
+  },
+  formInputMulti: {
+    minHeight: 70,
+    textAlignVertical: 'top',
+  },
+  visibilityRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  visibilityBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#E8ECF4',
+    backgroundColor: '#F8F9FD',
+  },
+  visibilityBtnActive: {
+    borderColor: '#4255FF',
+    backgroundColor: '#EEF2FF',
+  },
+  visibilityBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#60646C',
+  },
+  visibilityBtnTextActive: {
+    color: '#4255FF',
+    fontWeight: '700',
+  },
+  modalButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F2F7',
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: '#F0F2F7',
+  },
+  modalCancelBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#60646C',
+  },
+  modalSubmitBtn: {
+    flex: 1.5,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: '#4255FF',
+  },
+  modalSubmitBtnDisabled: {
+    backgroundColor: '#939BB4',
+  },
+  modalSubmitBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  submitLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
 });
+

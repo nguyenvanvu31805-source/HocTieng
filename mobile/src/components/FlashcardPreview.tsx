@@ -1,17 +1,23 @@
 import React from 'react';
-import { StyleSheet, Text, View, Image } from 'react-native';
+import { StyleSheet, Text, View, Image, TouchableOpacity } from 'react-native';
 import { Card } from '@/types/card';
 
 interface FlashcardPreviewProps {
   card: Card;
   index?: number;
   isStudied?: boolean;
+  canEdit?: boolean;
+  onEdit?: (card: Card) => void;
+  onDelete?: (card: Card) => void;
 }
 
 export default function FlashcardPreview({
   card,
   index,
   isStudied,
+  canEdit = false,
+  onEdit,
+  onDelete,
 }: FlashcardPreviewProps) {
   const displayPosition = card.position ?? (index !== undefined ? index + 1 : null);
 
@@ -59,6 +65,24 @@ export default function FlashcardPreview({
             style={styles.cardImage}
             resizeMode="cover"
           />
+        </View>
+      )}
+
+      {/* Hàng nút hành động chỉnh sửa / xóa dành cho chủ sở hữu */}
+      {canEdit && (
+        <View style={styles.cardActionsRow}>
+          <TouchableOpacity
+            style={styles.cardEditButton}
+            onPress={() => onEdit?.(card)}
+            activeOpacity={0.7}>
+            <Text style={styles.cardEditButtonText}>✏️ Sửa</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.cardDeleteButton}
+            onPress={() => onDelete?.(card)}
+            activeOpacity={0.7}>
+            <Text style={styles.cardDeleteButtonText}>🗑️ Xóa</Text>
+          </TouchableOpacity>
         </View>
       )}
     </View>
@@ -166,4 +190,37 @@ const styles = StyleSheet.create({
     height: 160,
     borderRadius: 10,
   },
+  cardActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F2F7',
+  },
+  cardEditButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: '#EEF2FF',
+    borderRadius: 8,
+  },
+  cardEditButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4255FF',
+  },
+  cardDeleteButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 8,
+  },
+  cardDeleteButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#DC2626',
+  },
 });
+
