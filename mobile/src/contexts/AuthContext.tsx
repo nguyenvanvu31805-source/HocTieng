@@ -19,6 +19,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (newToken: string, userData: User) => Promise<void>;
   logout: () => Promise<void>;
+  updateUser: (userData: Partial<User> | User) => void;
+  refreshUser: () => Promise<User | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -70,6 +72,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
+  const updateUser = (userData: Partial<User> | User) => {
+    setUser((prev) => (prev ? { ...prev, ...userData } : (userData as User)));
+  };
+
+  const refreshUser = async (): Promise<User | null> => {
+    try {
+      const res = await api.get<any>('/auth/me');
+      const userData = res?.data?.user || res?.data;
+      if (userData && (userData.user_id || userData.username)) {
+        setUser(userData);
+        return userData;
+      }
+    } catch (e) {
+      console.error('Failed to refresh user:', e);
+    }
+    return null;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -79,6 +99,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated: !!token,
         login,
         logout,
+        updateUser,
+        refreshUser,
       }}>
       {children}
     </AuthContext.Provider>
