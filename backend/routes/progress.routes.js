@@ -6,6 +6,12 @@ const {authenticate} = require("../middleware/auth.middleware");
 const router = express.Router();
 
 router.get(
+  "/progress/weak",
+  authenticate,
+  asyncHandler(progressController.getWeakCards),
+);
+
+router.get(
   "/progress/study-sets/:setId",
   authenticate,
   asyncHandler(progressController.getStudySetProgress),

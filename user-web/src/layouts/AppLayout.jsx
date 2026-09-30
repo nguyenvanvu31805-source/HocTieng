@@ -15,6 +15,7 @@ export default function AppLayout() {
           <NavLink to="/explore">Khám phá</NavLink>
           {user && <NavLink to="/library">Thư viện của tôi</NavLink>}
           {user && <NavLink to="/classes">Lớp học</NavLink>}
+          {user && <NavLink to="/weak-words">⚠️ Từ yếu</NavLink>}
         </nav>
         <div className="nav-actions">
           {user ? (

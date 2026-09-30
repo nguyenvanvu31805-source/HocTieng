@@ -38,6 +38,35 @@ export const cardProgressService = {
       return null;
     }
   },
+
+  /**
+   * Lấy danh sách từ yếu (Weak Cards Hub) của người dùng hiện tại
+   * Endpoint: GET /progress/weak?filter=...&page=...&limit=...
+   */
+  async getWeakCards(params?: {
+    filter?: 'all' | 'most_wrong' | 'low_mastery';
+    page?: number;
+    limit?: number;
+  }): Promise<import('@/types/cardProgress').WeakWordsResponseData | null> {
+    try {
+      const searchParams = new URLSearchParams();
+      if (params?.filter) searchParams.append('filter', params.filter);
+      if (params?.page) searchParams.append('page', String(params.page));
+      if (params?.limit) searchParams.append('limit', String(params.limit));
+
+      const queryString = searchParams.toString();
+      const endpoint = queryString ? `/progress/weak?${queryString}` : '/progress/weak';
+
+      const response = await api.get<import('@/types/cardProgress').WeakWordsResponseData>(endpoint);
+      if (response.success && response.data) {
+        return response.data;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  },
 };
 
 export default cardProgressService;
+

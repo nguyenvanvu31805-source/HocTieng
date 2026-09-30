@@ -15,6 +15,8 @@ import LibraryPage from "./pages/LibraryPage";
 import ProfilePage from "./pages/ProfilePage";
 import ClassesPage from "./pages/ClassesPage";
 import ClassDetailPage from "./pages/ClassDetailPage";
+import WeakWordsPage from "./pages/WeakWordsPage";
+import WeakReviewPage from "./pages/WeakReviewPage";
 import "./App.css";
 
 function App() {
@@ -45,6 +47,8 @@ function App() {
               <Route path="/library" element={<LibraryPage />} />
               <Route path="/classes" element={<ClassesPage />} />
               <Route path="/classes/:classId" element={<ClassDetailPage />} />
+              <Route path="/weak-words" element={<WeakWordsPage />} />
+              <Route path="/review/weak" element={<WeakReviewPage />} />
               <Route
                 path="/bookmarks"
                 element={<PlaceholderPage title="Đã lưu" code="API-06" />}

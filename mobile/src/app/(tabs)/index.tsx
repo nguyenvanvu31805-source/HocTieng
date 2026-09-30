@@ -9,10 +9,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { StudySet } from '@/types/studySet';
 import api from '@/services/api';
+import cardProgressService from '@/services/cardProgressService';
 import StudySetCard from '@/components/StudySetCard';
 
 export default function HomeScreen() {
@@ -20,9 +21,29 @@ export default function HomeScreen() {
   const { user, isAuthenticated, loading: authLoading } = useAuth();
 
   const [studySets, setStudySets] = useState<StudySet[]>([]);
+  const [weakWordsCount, setWeakWordsCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  const fetchWeakCount = useCallback(async () => {
+    if (!isAuthenticated) {
+      setWeakWordsCount(0);
+      return;
+    }
+    const res = await cardProgressService.getWeakCards({ page: 1, limit: 1 });
+    if (res && res.summary) {
+      setWeakWordsCount(res.summary.total_weak_cards || 0);
+    } else {
+      setWeakWordsCount(0);
+    }
+  }, [isAuthenticated]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchWeakCount();
+    }, [fetchWeakCount]),
+  );
 
   const fetchFeaturedSets = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
@@ -55,6 +76,7 @@ export default function HomeScreen() {
   const handleRefresh = () => {
     setRefreshing(true);
     fetchFeaturedSets(true);
+    fetchWeakCount();
   };
 
   const displayName = user?.full_name || user?.username || 'Bạn';
@@ -91,6 +113,37 @@ export default function HomeScreen() {
           <Text style={styles.bannerButtonText}>Khám phá Thư viện →</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Thẻ nhắc nhở Từ cần ôn lại (Từ yếu) */}
+      {isAuthenticated && weakWordsCount > 0 && (
+        <View style={styles.weakWordsCard}>
+          <View style={styles.weakWordsHeader}>
+            <View style={styles.weakWordsIconBox}>
+              <Text style={styles.weakWordsIcon}>⚠️</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.weakWordsBadge}>TỪ CẦN ÔN LẠI</Text>
+              <Text style={styles.weakWordsTitle}>
+                Bạn có {weakWordsCount} từ vựng cần củng cố
+              </Text>
+            </View>
+          </View>
+          <View style={styles.weakWordsActionRow}>
+            <TouchableOpacity
+              style={styles.weakWordsReviewBtn}
+              onPress={() => router.push('/review/weak' as any)}
+              activeOpacity={0.85}>
+              <Text style={styles.weakWordsReviewBtnText}>⚡ Học lại ngay</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.weakWordsListBtn}
+              onPress={() => router.push('/weak-words' as any)}
+              activeOpacity={0.85}>
+              <Text style={styles.weakWordsListBtnText}>Xem danh sách →</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* Lối tắt truy cập Lớp học */}
       <TouchableOpacity
@@ -404,5 +457,77 @@ const styles = StyleSheet.create({
     color: '#60646C',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  weakWordsCard: {
+    backgroundColor: '#FFF7ED',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: '#FED7AA',
+    shadowColor: '#EA580C',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  weakWordsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 12,
+  },
+  weakWordsIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#FFEDD5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  weakWordsIcon: {
+    fontSize: 22,
+  },
+  weakWordsBadge: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#C2410C',
+    letterSpacing: 0.6,
+    marginBottom: 2,
+  },
+  weakWordsTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#7C2D12',
+    lineHeight: 20,
+  },
+  weakWordsActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  weakWordsReviewBtn: {
+    backgroundColor: '#EA580C',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+  },
+  weakWordsReviewBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  weakWordsListBtn: {
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  weakWordsListBtnText: {
+    color: '#C2410C',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

@@ -114,7 +114,69 @@ const reviewCard = async (cardIdValue, user, {correct}) => {
   return progressRepository.saveReview({userId, cardId, correct});
 };
 
+const getWeakCards = async (user, query = {}) => {
+  const userId = await requireActiveUser(user);
+
+  // Validate filter
+  let filter = "all";
+  if (query.filter !== undefined && query.filter !== null && String(query.filter).trim() !== "") {
+    const rawFilter = String(query.filter).toLowerCase().trim();
+    const allowedFilters = ["all", "most_wrong", "low_mastery"];
+    if (!allowedFilters.includes(rawFilter)) {
+      throw new AppError(
+        `Invalid filter value. Allowed filters: ${allowedFilters.join(", ")}`,
+        400,
+      );
+    }
+    filter = rawFilter;
+  }
+
+  // Validate page
+  let page = 1;
+  if (query.page !== undefined && query.page !== null && String(query.page).trim() !== "") {
+    const rawPage = String(query.page).trim();
+    if (!/^\d+$/.test(rawPage) || Number(rawPage) < 1) {
+      throw new AppError("page must be a positive integer", 400);
+    }
+    page = Number(rawPage);
+  }
+
+  // Validate limit
+  let limit = 20;
+  if (query.limit !== undefined && query.limit !== null && String(query.limit).trim() !== "") {
+    const rawLimit = String(query.limit).trim();
+    if (!/^\d+$/.test(rawLimit) || Number(rawLimit) < 1 || Number(rawLimit) > 50) {
+      throw new AppError("limit must be an integer between 1 and 50", 400);
+    }
+    limit = Number(rawLimit);
+  }
+
+  const offset = (page - 1) * limit;
+
+  const [items, total] = await Promise.all([
+    progressRepository.findWeakCardsByUser({ userId, filter, limit, offset }),
+    progressRepository.countWeakCardsByUser(userId),
+  ]);
+
+  const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+
+  return {
+    items,
+    pagination: {
+      page,
+      limit,
+      total,
+      total_pages: totalPages,
+    },
+    summary: {
+      total_weak_cards: total,
+    },
+  };
+};
+
 module.exports = {
   getProgressByStudySet,
   reviewCard,
+  getWeakCards,
 };
+

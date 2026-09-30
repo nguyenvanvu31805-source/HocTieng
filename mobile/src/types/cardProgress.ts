@@ -38,3 +38,38 @@ export interface StudySetProgress {
   counts?: FilterCounts;
   records: CardProgressRecord[];
 }
+
+export interface WeakCard {
+  card_id: number;
+  set_id: number;
+  set_title: string;
+  term: string;
+  definition: string;
+  pronunciation?: string | null;
+  example?: string | null;
+  audio_url?: string | null;
+  image_url?: string | null;
+  mastery_level: number;
+  correct_count: number;
+  wrong_count: number;
+  last_reviewed_at?: string | null;
+  next_review_at?: string | null;
+}
+
+export type WeakFilterType = 'all' | 'most_wrong' | 'low_mastery';
+
+export interface WeakWordsPagination {
+  page: number;
+  limit: number;
+  total: number;
+  total_pages: number;
+}
+
+export interface WeakWordsResponseData {
+  items: WeakCard[];
+  pagination: WeakWordsPagination;
+  summary: {
+    total_weak_cards: number;
+  };
+}
+

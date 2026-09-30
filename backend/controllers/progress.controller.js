@@ -18,4 +18,10 @@ const reviewCard = async (req, res) => {
   return success(res, progress, "Card progress updated successfully");
 };
 
-module.exports = {getStudySetProgress, reviewCard};
+const getWeakCards = async (req, res) => {
+  const data = await progressService.getWeakCards(req.user, req.query);
+  return success(res, data, "Weak cards retrieved successfully");
+};
+
+module.exports = {getStudySetProgress, reviewCard, getWeakCards};
+
