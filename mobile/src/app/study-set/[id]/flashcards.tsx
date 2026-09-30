@@ -17,6 +17,7 @@ import { StudySet } from '@/types/studySet';
 import { StudySetProgress } from '@/types/cardProgress';
 import api from '@/services/api';
 import cardProgressService from '@/services/cardProgressService';
+import { playAudio } from '@/utils/audioPlayer';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width - 40;
@@ -457,11 +458,22 @@ export default function FlashcardsScreen() {
           style={styles.cardTouchWrapper}
           activeOpacity={0.92}
           onPress={handleFlipCard}>
-          {/* Mặt trước của thẻ (Term / Pronunciation) */}
+          {/* Mặt trước của thẻ (Term / Pronunciation / Audio) */}
           <Animated.View style={[styles.cardContainer, frontAnimatedStyle]}>
             <View style={styles.cardHeaderRow}>
-              <View style={styles.termBadge}>
-                <Text style={styles.termBadgeText}>THUẬT NGỮ</Text>
+              <View style={styles.headerLeftRow}>
+                <View style={styles.termBadge}>
+                  <Text style={styles.termBadgeText}>THUẬT NGỮ</Text>
+                </View>
+                {Boolean(currentCard.audio_url && currentCard.audio_url.trim()) && (
+                  <TouchableOpacity
+                    style={styles.audioBtn}
+                    onPress={() => playAudio(currentCard.audio_url)}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={styles.audioBtnText}>🔊 Phát âm</Text>
+                  </TouchableOpacity>
+                )}
               </View>
 
               <View style={styles.cardHeaderRight}>
@@ -483,10 +495,10 @@ export default function FlashcardsScreen() {
             <View style={styles.frontContentWrapper}>
               <Text style={styles.termText}>{currentCard.term}</Text>
 
-              {!!currentCard.pronunciation && (
+              {Boolean(currentCard.pronunciation && currentCard.pronunciation.trim()) && (
                 <View style={styles.pronunciationBox}>
                   <Text style={styles.pronunciationText}>
-                    {currentCard.pronunciation}
+                    {currentCard.pronunciation?.trim()}
                   </Text>
                 </View>
               )}
@@ -499,7 +511,7 @@ export default function FlashcardsScreen() {
             </View>
           </Animated.View>
 
-          {/* Mặt sau của thẻ (Definition / Example / Image) */}
+          {/* Mặt sau của thẻ (Definition / Pronunciation / Example / Audio) */}
           <Animated.View
             style={[
               styles.cardContainer,
@@ -507,8 +519,19 @@ export default function FlashcardsScreen() {
               backAnimatedStyle,
             ]}>
             <View style={styles.cardHeaderRow}>
-              <View style={styles.defBadge}>
-                <Text style={styles.defBadgeText}>ĐỊNH NGHĨA</Text>
+              <View style={styles.headerLeftRow}>
+                <View style={styles.defBadge}>
+                  <Text style={styles.defBadgeText}>ĐỊNH NGHĨA</Text>
+                </View>
+                {Boolean(currentCard.audio_url && currentCard.audio_url.trim()) && (
+                  <TouchableOpacity
+                    style={styles.audioBtn}
+                    onPress={() => playAudio(currentCard.audio_url)}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={styles.audioBtnText}>🔊 Phát âm</Text>
+                  </TouchableOpacity>
+                )}
               </View>
 
               <View style={styles.cardHeaderRight}>
@@ -544,11 +567,20 @@ export default function FlashcardsScreen() {
                 {currentCard.definition}
               </Text>
 
-              {/* Câu ví dụ minh họa (nếu có) */}
-              {!!currentCard.example && (
+              {/* Phát âm trên mặt sau nếu có */}
+              {Boolean(currentCard.pronunciation && currentCard.pronunciation.trim()) && (
+                <View style={styles.backPronunciationBox}>
+                  <Text style={styles.backPronunciationText}>
+                    {currentCard.pronunciation?.trim()}
+                  </Text>
+                </View>
+              )}
+
+              {/* Câu ví dụ minh họa nổi bật (nếu có) */}
+              {Boolean(currentCard.example && currentCard.example.trim()) && (
                 <View style={styles.exampleBox}>
                   <Text style={styles.exampleLabel}>💬 Ví dụ:</Text>
-                  <Text style={styles.exampleText}>"{currentCard.example}"</Text>
+                  <Text style={styles.exampleText}>"{currentCard.example?.trim()}"</Text>
                 </View>
               )}
             </ScrollView>
@@ -732,6 +764,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  headerLeftRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  audioBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  audioBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4255FF',
+  },
   cardHeaderRight: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -835,6 +887,21 @@ const styles = StyleSheet.create({
     color: '#2E3856',
     textAlign: 'center',
     lineHeight: 30,
+  },
+  backPronunciationBox: {
+    marginTop: 8,
+    backgroundColor: '#F4F6FB',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E8ECF4',
+  },
+  backPronunciationText: {
+    fontSize: 15,
+    color: '#4255FF',
+    fontWeight: '600',
+    fontStyle: 'italic',
   },
   exampleBox: {
     marginTop: 16,

@@ -22,6 +22,7 @@ import {
 import api from '@/services/api';
 import testResultService from '@/services/testResultService';
 import cardProgressService from '@/services/cardProgressService';
+import { playAudio } from '@/utils/audioPlayer';
 
 const { width } = Dimensions.get('window');
 
@@ -67,6 +68,8 @@ function buildQuizQuestions(cards: Card[]): QuizQuestion[] {
       card_id: card.card_id,
       term: card.term,
       pronunciation: card.pronunciation,
+      example: card.example,
+      audio_url: card.audio_url,
       correctDefinition: card.definition.trim(),
       options,
     };
@@ -165,6 +168,8 @@ export default function TestScreen() {
           questionNumber: idx + 1,
           term: q.term,
           pronunciation: q.pronunciation,
+          example: q.example,
+          audio_url: q.audio_url,
           userAnswer: userChoice,
           correctAnswer: q.correctDefinition,
           isCorrect,
@@ -438,9 +443,20 @@ export default function TestScreen() {
                 </View>
               </View>
 
-              <Text style={styles.detailTermText}>{item.term}</Text>
-              {!!item.pronunciation && (
-                <Text style={styles.detailPronunciation}>{item.pronunciation}</Text>
+              <View style={styles.detailTermRow}>
+                <Text style={styles.detailTermText}>{item.term}</Text>
+                {Boolean(item.audio_url && item.audio_url.trim()) && (
+                  <TouchableOpacity
+                    style={styles.audioBtn}
+                    onPress={() => playAudio(item.audio_url)}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={styles.audioBtnText}>🔊</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              {Boolean(item.pronunciation && item.pronunciation.trim()) && (
+                <Text style={styles.detailPronunciation}>{item.pronunciation?.trim()}</Text>
               )}
 
               <View style={styles.detailAnswersBlock}>
@@ -464,6 +480,13 @@ export default function TestScreen() {
                   </View>
                 )}
               </View>
+
+              {Boolean(item.example && item.example.trim()) && (
+                <View style={styles.detailExampleBox}>
+                  <Text style={styles.detailExampleLabel}>💬 Ví dụ:</Text>
+                  <Text style={styles.detailExampleText}>"{item.example?.trim()}"</Text>
+                </View>
+              )}
             </View>
           ))}
         </ScrollView>
@@ -513,8 +536,19 @@ export default function TestScreen() {
         {/* Khung câu hỏi */}
         <View style={styles.questionCard}>
           <View style={styles.questionBadgeRow}>
-            <View style={styles.questionTag}>
-              <Text style={styles.questionTagText}>CÂU HỎI {currentIndex + 1}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={styles.questionTag}>
+                <Text style={styles.questionTagText}>CÂU HỎI {currentIndex + 1}</Text>
+              </View>
+              {Boolean(currentQ.audio_url && currentQ.audio_url.trim()) && (
+                <TouchableOpacity
+                  style={styles.audioBtn}
+                  onPress={() => playAudio(currentQ.audio_url)}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.audioBtnText}>🔊 Phát âm</Text>
+                </TouchableOpacity>
+              )}
             </View>
             {!!currentSelectedChoice ? (
               <View style={styles.answeredPill}>
@@ -1145,6 +1179,11 @@ const styles = StyleSheet.create({
   statusTextWrong: {
     color: '#DC2626',
   },
+  detailTermRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   detailTermText: {
     fontSize: 18,
     fontWeight: '700',
@@ -1179,6 +1218,41 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#2E3856',
+  },
+  detailExampleBox: {
+    marginTop: 10,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    padding: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: '#4255FF',
+  },
+  detailExampleLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4255FF',
+    marginBottom: 2,
+  },
+  detailExampleText: {
+    fontSize: 13,
+    color: '#475569',
+    fontStyle: 'italic',
+    lineHeight: 18,
+  },
+  audioBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  audioBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4255FF',
   },
   textCorrect: {
     color: '#15803D',

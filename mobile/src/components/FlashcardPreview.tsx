@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View, Image, TouchableOpacity } from 'react-native';
 import { Card } from '@/types/card';
+import { playAudio } from '@/utils/audioPlayer';
 
 interface FlashcardPreviewProps {
   card: Card;
@@ -20,14 +21,29 @@ export default function FlashcardPreview({
   onDelete,
 }: FlashcardPreviewProps) {
   const displayPosition = card.position ?? (index !== undefined ? index + 1 : null);
+  const hasExample = Boolean(card.example && card.example.trim());
+  const hasPronunciation = Boolean(card.pronunciation && card.pronunciation.trim());
+  const hasAudio = Boolean(card.audio_url && card.audio_url.trim());
 
   return (
     <View style={styles.card}>
-      {/* Header của thẻ: Từ vựng & Số thứ tự */}
+      {/* Header của thẻ: Thuật ngữ, Phát âm, Nút Audio & Huy hiệu */}
       <View style={styles.topRow}>
         <View style={styles.termContainer}>
-          <Text style={styles.termText}>{card.term}</Text>
-          {!!card.pronunciation && (
+          <View style={styles.termTitleRow}>
+            <Text style={styles.termText}>{card.term}</Text>
+            {hasAudio && (
+              <TouchableOpacity
+                style={styles.audioBtn}
+                onPress={() => playAudio(card.audio_url)}
+                activeOpacity={0.7}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={styles.audioBtnText}>🔊</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {hasPronunciation && (
             <Text style={styles.pronunciationText}>{card.pronunciation}</Text>
           )}
         </View>
@@ -49,11 +65,11 @@ export default function FlashcardPreview({
       {/* Định nghĩa / Nghĩa của từ */}
       <Text style={styles.definitionText}>{card.definition}</Text>
 
-      {/* Câu ví dụ (nếu có) */}
-      {!!card.example && (
+      {/* Câu ví dụ ngữ cảnh minh họa (chỉ hiển thị khi có ví dụ) */}
+      {hasExample && (
         <View style={styles.exampleContainer}>
-          <Text style={styles.exampleLabel}>Ví dụ:</Text>
-          <Text style={styles.exampleText}>"{card.example}"</Text>
+          <Text style={styles.exampleLabel}>💬 Ví dụ:</Text>
+          <Text style={styles.exampleText}>"{card.example?.trim()}"</Text>
         </View>
       )}
 
@@ -113,10 +129,24 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
   },
+  termTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   termText: {
     fontSize: 18,
     fontWeight: '700',
     color: '#2E3856',
+  },
+  audioBtn: {
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  audioBtnText: {
+    fontSize: 14,
   },
   pronunciationText: {
     fontSize: 14,
@@ -160,9 +190,9 @@ const styles = StyleSheet.create({
   },
   exampleContainer: {
     backgroundColor: '#F8F9FD',
-    padding: 10,
-    borderRadius: 8,
-    borderLeftWidth: 3,
+    padding: 12,
+    borderRadius: 10,
+    borderLeftWidth: 3.5,
     borderLeftColor: '#4255FF',
     marginTop: 4,
     marginBottom: 8,
@@ -172,13 +202,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#60646C',
     textTransform: 'uppercase',
-    marginBottom: 2,
+    marginBottom: 4,
+    letterSpacing: 0.5,
   },
   exampleText: {
-    fontSize: 13,
-    color: '#495057',
+    fontSize: 14,
+    color: '#2E3856',
     fontStyle: 'italic',
-    lineHeight: 18,
+    lineHeight: 20,
   },
   imageContainer: {
     marginTop: 6,
@@ -223,4 +254,3 @@ const styles = StyleSheet.create({
     color: '#DC2626',
   },
 });
-

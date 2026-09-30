@@ -19,6 +19,7 @@ import { StudySet } from '@/types/studySet';
 import studySetService from '@/services/studySetService';
 import cardService from '@/services/cardService';
 import cardProgressService from '@/services/cardProgressService';
+import { playAudio } from '@/utils/audioPlayer';
 
 // Hàm xáo trộn mảng ngẫu nhiên theo thuật toán Fisher-Yates
 function shuffleArray<T>(array: T[]): T[] {
@@ -408,20 +409,28 @@ export default function LearnModeScreen() {
           {/* Thẻ Thuật ngữ câu hỏi */}
           <View style={styles.termCard}>
             <View style={styles.termHeaderRow}>
-              <Text style={styles.termTag}>THUẬT NGỮ</Text>
+              <View style={styles.termBadgeRow}>
+                <Text style={styles.termTag}>THUẬT NGỮ</Text>
+                {Boolean(currentCard.audio_url && currentCard.audio_url.trim()) && (
+                  <TouchableOpacity
+                    style={styles.audioBtn}
+                    onPress={() => playAudio(currentCard.audio_url)}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={styles.audioBtnText}>🔊 Phát âm</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
               <Text style={styles.cardIndexText}>Thẻ #{currentIndex + 1}</Text>
             </View>
 
             <Text style={styles.termText}>{currentCard.term}</Text>
 
-            {!!currentCard.pronunciation && (
-              <Text style={styles.pronunciationText}>{currentCard.pronunciation}</Text>
-            )}
-
-            {!!currentCard.example && (
-              <View style={styles.exampleBox}>
-                <Text style={styles.exampleLabel}>Ví dụ:</Text>
-                <Text style={styles.exampleText}>"{currentCard.example}"</Text>
+            {Boolean(currentCard.pronunciation && currentCard.pronunciation.trim()) && (
+              <View style={styles.pronunciationBox}>
+                <Text style={styles.pronunciationText}>
+                  {currentCard.pronunciation?.trim()}
+                </Text>
               </View>
             )}
           </View>
@@ -460,14 +469,25 @@ export default function LearnModeScreen() {
                 isCorrect ? styles.feedbackCardSuccess : styles.feedbackCardDanger,
               ]}>
               <View style={styles.feedbackHeaderRow}>
-                <Text style={styles.feedbackEmoji}>{isCorrect ? '✓' : '✗'}</Text>
-                <Text
-                  style={[
-                    styles.feedbackTitle,
-                    isCorrect ? styles.textSuccess : styles.textDanger,
-                  ]}>
-                  {isCorrect ? 'Chính xác! Tuyệt vời!' : 'Chưa chính xác'}
-                </Text>
+                <View style={styles.feedbackTitleRow}>
+                  <Text style={styles.feedbackEmoji}>{isCorrect ? '✓' : '✗'}</Text>
+                  <Text
+                    style={[
+                      styles.feedbackTitle,
+                      isCorrect ? styles.textSuccess : styles.textDanger,
+                    ]}>
+                    {isCorrect ? 'Chính xác! Tuyệt vời!' : 'Chưa chính xác'}
+                  </Text>
+                </View>
+                {Boolean(currentCard.audio_url && currentCard.audio_url.trim()) && (
+                  <TouchableOpacity
+                    style={styles.audioBtn}
+                    onPress={() => playAudio(currentCard.audio_url)}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={styles.audioBtnText}>🔊 Phát âm</Text>
+                  </TouchableOpacity>
+                )}
               </View>
 
               {!isCorrect && (
@@ -492,6 +512,26 @@ export default function LearnModeScreen() {
                 <Text style={styles.correctNoteText}>
                   Định nghĩa: {currentCard.definition}
                 </Text>
+              )}
+
+              {/* Phiên âm sau khi kiểm tra câu trả lời */}
+              {Boolean(currentCard.pronunciation && currentCard.pronunciation.trim()) && (
+                <View style={styles.feedbackPronunciationBox}>
+                  <Text style={styles.feedbackPronunciationLabel}>Phiên âm:</Text>
+                  <Text style={styles.feedbackPronunciationText}>
+                    {currentCard.pronunciation?.trim()}
+                  </Text>
+                </View>
+              )}
+
+              {/* Ví dụ ngữ cảnh nổi bật sau khi nộp bài */}
+              {Boolean(currentCard.example && currentCard.example.trim()) && (
+                <View style={styles.feedbackExampleBox}>
+                  <Text style={styles.feedbackExampleLabel}>💬 Ví dụ:</Text>
+                  <Text style={styles.feedbackExampleText}>
+                    "{currentCard.example?.trim()}"
+                  </Text>
+                </View>
               )}
             </View>
           )}
@@ -633,6 +673,37 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     textTransform: 'uppercase',
   },
+  termBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  audioBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  audioBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4255FF',
+  },
+  pronunciationBox: {
+    marginTop: 4,
+    backgroundColor: '#F4F6FB',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E8ECF4',
+    marginBottom: 8,
+  },
   cardIndexText: {
     fontSize: 12,
     fontWeight: '600',
@@ -725,7 +796,12 @@ const styles = StyleSheet.create({
   feedbackHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 8,
+  },
+  feedbackTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   feedbackEmoji: {
     fontSize: 20,
@@ -776,6 +852,49 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#059669',
     fontWeight: '600',
+  },
+  feedbackPronunciationBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  feedbackPronunciationLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#60646C',
+    textTransform: 'uppercase',
+  },
+  feedbackPronunciationText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4255FF',
+    fontStyle: 'italic',
+  },
+  feedbackExampleBox: {
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    borderRadius: 8,
+    padding: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: '#4255FF',
+    marginTop: 10,
+  },
+  feedbackExampleLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4255FF',
+    marginBottom: 2,
+  },
+  feedbackExampleText: {
+    fontSize: 13,
+    color: '#334155',
+    fontStyle: 'italic',
+    lineHeight: 18,
   },
   bottomActionBar: {
     padding: 16,

@@ -24,6 +24,8 @@ export interface QuizQuestion {
   card_id: number;
   term: string;
   pronunciation?: string | null;
+  example?: string | null;
+  audio_url?: string | null;
   correctDefinition: string;
   options: QuestionOption[];
 }
@@ -32,6 +34,8 @@ export interface QuestionResultDetail {
   questionNumber: number;
   term: string;
   pronunciation?: string | null;
+  example?: string | null;
+  audio_url?: string | null;
   userAnswer: string;
   correctAnswer: string;
   isCorrect: boolean;

@@ -39,6 +39,26 @@ export default function LearnPage() {
     (item) => item.correct_count > 0 || item.wrong_count > 0,
   ).length;
 
+  const playAudio = (e, url, term) => {
+    e?.stopPropagation?.();
+    if (url) {
+      const audio = new Audio(url);
+      audio.play().catch(() => {
+        if ("speechSynthesis" in window && term) {
+          window.speechSynthesis.cancel();
+          const u = new SpeechSynthesisUtterance(term);
+          u.lang = "en-US";
+          window.speechSynthesis.speak(u);
+        }
+      });
+    } else if ("speechSynthesis" in window && term) {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(term);
+      u.lang = "en-US";
+      window.speechSynthesis.speak(u);
+    }
+  };
+
   const fetchData = useCallback(async () => {
     setState({loading: true, error: "", notFound: false});
     setSubmitError("");
@@ -291,10 +311,22 @@ export default function LearnPage() {
       </div>
 
       <form className="learn-card" onSubmit={handleSubmit}>
-        <span className="card-face-tag">TỪ CẦN LUYỆN</span>
+        <div style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
+          <span className="card-face-tag">TỪ CẦN LUYỆN</span>
+          {Boolean(currentCard.audio_url && currentCard.audio_url.trim()) && (
+            <button
+              type="button"
+              className="audio-btn"
+              onClick={(e) => playAudio(e, currentCard.audio_url, currentCard.term)}
+              title="Phát âm"
+            >
+              🔊 Phát âm
+            </button>
+          )}
+        </div>
         <h2>{currentCard.term}</h2>
-        {currentCard.pronunciation && (
-          <span className="card-pronunciation">{currentCard.pronunciation}</span>
+        {Boolean(currentCard.pronunciation && currentCard.pronunciation.trim()) && (
+          <span className="card-pronunciation">{currentCard.pronunciation.trim()}</span>
         )}
         <p className="learn-question">Nghĩa của từ này là gì?</p>
         <label className="learn-answer-label">
@@ -319,13 +351,40 @@ export default function LearnPage() {
               isCorrect ? "learn-answer-correct" : "learn-answer-wrong"
             }`}
           >
-            <strong>{isCorrect ? "Chính xác!" : "Chưa chính xác"}</strong>
+            <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px"}}>
+              <strong>{isCorrect ? "✓ Chính xác! Tuyệt vời!" : "✕ Chưa chính xác"}</strong>
+              {Boolean(currentCard.audio_url && currentCard.audio_url.trim()) && (
+                <button
+                  type="button"
+                  className="audio-btn"
+                  onClick={(e) => playAudio(e, currentCard.audio_url, currentCard.term)}
+                  title="Phát âm"
+                >
+                  🔊 Phát âm
+                </button>
+              )}
+            </div>
             <span>
               Đáp án đúng: <b>{currentCard.definition}</b>
             </span>
             <span>
-              Câu trả lời của bạn: <b>{currentAnswer}</b>
+              Câu trả lời của bạn: <b>{currentAnswer || "(Chưa có câu trả lời)"}</b>
             </span>
+
+            {Boolean(currentCard.pronunciation && currentCard.pronunciation.trim()) && (
+              <span className="card-pronunciation" style={{marginTop: "6px", display: "inline-block"}}>
+                Phiên âm: {currentCard.pronunciation.trim()}
+              </span>
+            )}
+
+            {Boolean(currentCard.example && currentCard.example.trim()) && (
+              <div className="card-example-box" style={{marginTop: "10px"}}>
+                <span className="example-label">💬 Ví dụ:</span>
+                <p className="card-example" style={{margin: "4px 0 0 0"}}>
+                  "{currentCard.example.trim()}"
+                </p>
+              </div>
+            )}
           </div>
         )}
 

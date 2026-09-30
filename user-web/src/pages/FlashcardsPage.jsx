@@ -278,14 +278,16 @@ export default function FlashcardsPage() {
             <div className="card-face-header">
               <span className="card-face-tag">THUẬT NGỮ</span>
               <div style={{display: "flex", alignItems: "center", gap: "8px"}}>
-                <button
-                  type="button"
-                  className="audio-btn"
-                  onClick={(e) => playAudio(e, currentCard.audio_url, currentCard.term)}
-                  title="Phát âm"
-                >
-                  🔊 Phát âm
-                </button>
+                {Boolean(currentCard.audio_url && currentCard.audio_url.trim()) && (
+                  <button
+                    type="button"
+                    className="audio-btn"
+                    onClick={(e) => playAudio(e, currentCard.audio_url, currentCard.term)}
+                    title="Phát âm"
+                  >
+                    🔊 Phát âm
+                  </button>
+                )}
                 <span className="card-index-badge">
                   {String(currentCardIndex + 1).padStart(2, "0")}
                 </span>
@@ -294,9 +296,9 @@ export default function FlashcardsPage() {
 
             <div className="card-main-content">
               <h1 className="card-term">{currentCard.term}</h1>
-              {currentCard.pronunciation && (
+              {Boolean(currentCard.pronunciation && currentCard.pronunciation.trim()) && (
                 <span className="card-pronunciation">
-                  {currentCard.pronunciation}
+                  {currentCard.pronunciation.trim()}
                 </span>
               )}
             </div>
@@ -310,23 +312,31 @@ export default function FlashcardsPage() {
           <div className="flashcard-face flashcard-back">
             <div className="card-face-header">
               <span className="card-face-tag">ĐỊNH NGHĨA</span>
-              <button
-                type="button"
-                className="audio-btn"
-                onClick={(e) => playAudio(e, currentCard.audio_url, currentCard.term)}
-                title="Phát âm"
-              >
-                🔊 Phát âm
-              </button>
+              {Boolean(currentCard.audio_url && currentCard.audio_url.trim()) && (
+                <button
+                  type="button"
+                  className="audio-btn"
+                  onClick={(e) => playAudio(e, currentCard.audio_url, currentCard.term)}
+                  title="Phát âm"
+                >
+                  🔊 Phát âm
+                </button>
+              )}
             </div>
 
             <div className="card-main-content">
               <p className="card-definition">{currentCard.definition}</p>
 
-              {currentCard.example && (
+              {Boolean(currentCard.pronunciation && currentCard.pronunciation.trim()) && (
+                <span className="card-pronunciation" style={{marginTop: "8px", display: "inline-block"}}>
+                  {currentCard.pronunciation.trim()}
+                </span>
+              )}
+
+              {Boolean(currentCard.example && currentCard.example.trim()) && (
                 <div className="card-example-box">
-                  <span className="example-label">Ví dụ:</span>
-                  <p className="card-example">"{currentCard.example}"</p>
+                  <span className="example-label">💬 Ví dụ:</span>
+                  <p className="card-example">"{currentCard.example.trim()}"</p>
                 </div>
               )}
 

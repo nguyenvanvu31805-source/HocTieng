@@ -507,32 +507,27 @@ export default function StudySetDetailPage() {
               </span>
               <div>
                 <h3>{card.term}</h3>
-                <div style={{display: "flex", alignItems: "center", gap: "8px", marginTop: "4px"}}>
-                  <span className="pronunciation">
-                    {card.pronunciation || "Chưa có phát âm"}
-                  </span>
-                  {(card.audio_url || card.term) && (
+                <div style={{display: "flex", alignItems: "center", gap: "8px", marginTop: "4px", flexWrap: "wrap"}}>
+                  {Boolean(card.pronunciation && card.pronunciation.trim()) && (
+                    <span className="pronunciation">
+                      {card.pronunciation.trim()}
+                    </span>
+                  )}
+                  {Boolean(card.audio_url && card.audio_url.trim()) && (
                     <button
                       type="button"
                       className="btn-card-action"
                       style={{padding: "2px 8px", fontSize: "11px", lineHeight: "1.4"}}
                       onClick={() => {
-                        if (card.audio_url) {
-                          const audio = new Audio(card.audio_url);
-                          audio.play().catch(() => {
-                            if ("speechSynthesis" in window) {
-                              window.speechSynthesis.cancel();
-                              const u = new SpeechSynthesisUtterance(card.term);
-                              u.lang = "en-US";
-                              window.speechSynthesis.speak(u);
-                            }
-                          });
-                        } else if ("speechSynthesis" in window) {
-                          window.speechSynthesis.cancel();
-                          const u = new SpeechSynthesisUtterance(card.term);
-                          u.lang = "en-US";
-                          window.speechSynthesis.speak(u);
-                        }
+                        const audio = new Audio(card.audio_url);
+                        audio.play().catch(() => {
+                          if ("speechSynthesis" in window) {
+                            window.speechSynthesis.cancel();
+                            const u = new SpeechSynthesisUtterance(card.term);
+                            u.lang = "en-US";
+                            window.speechSynthesis.speak(u);
+                          }
+                        });
                       }}
                       title="Nghe phát âm"
                     >
@@ -543,7 +538,11 @@ export default function StudySetDetailPage() {
               </div>
               <p>{card.definition}</p>
               <div>
-                <p className="example">{card.example || "Chưa có ví dụ."}</p>
+                {Boolean(card.example && card.example.trim()) && (
+                  <p className="example" style={{fontStyle: "italic", color: "#475569"}}>
+                    💬 Ví dụ: "{card.example.trim()}"
+                  </p>
+                )}
                 {card.image_url && (
                   <img
                     className="card-image"
