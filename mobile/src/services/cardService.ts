@@ -20,8 +20,12 @@ export interface UpdateCardDto {
 }
 
 export const cardService = {
-  getCards: async (setId: number | string): Promise<ApiResponse<Card[]>> => {
-    return api.get<Card[]>(`/study-sets/${setId}/cards`);
+  getCards: async (
+    setId: number | string,
+    filter?: string,
+  ): Promise<ApiResponse<Card[]>> => {
+    const query = filter && filter !== 'all' ? `?filter=${encodeURIComponent(filter)}` : '';
+    return api.get<Card[]>(`/study-sets/${setId}/cards${query}`);
   },
 
   createCard: async (

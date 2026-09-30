@@ -70,7 +70,7 @@ const normalizeCardInput = ({
   position,
 });
 
-const getCards = async (setIdValue, user) => {
+const getCards = async (setIdValue, user, query = {}) => {
   const setId = parsePositiveId(setIdValue, "setId");
   const studySet = await getStudySetOrThrow(setId);
   if (!canViewSet(studySet, user)) {
@@ -79,7 +79,29 @@ const getCards = async (setIdValue, user) => {
       403,
     );
   }
-  return cardRepository.findBySetId(setId);
+
+  const rawFilter = query && query.filter ? String(query.filter).toLowerCase().trim() : "all";
+  const allowedFilters = ["all", "unlearned", "weak", "review", "mastered"];
+  if (!allowedFilters.includes(rawFilter)) {
+    throw new AppError(
+      `Invalid filter value. Allowed filters: ${allowedFilters.join(", ")}`,
+      400,
+    );
+  }
+
+  const userId = getUserId(user);
+  if (rawFilter !== "all" && !userId) {
+    throw new AppError(
+      "Authentication token is required to filter cards by study progress",
+      401,
+    );
+  }
+
+  if (rawFilter === "all") {
+    return cardRepository.findBySetId(setId);
+  }
+
+  return cardRepository.findBySetIdAndFilter({ setId, userId, filter: rawFilter });
 };
 
 const createCard = async (setIdValue, user, cardData) => {

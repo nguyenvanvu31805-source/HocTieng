@@ -24,7 +24,8 @@ const CARD_WIDTH = width - 40;
 
 export default function FlashcardsScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, filter: initialFilter } = useLocalSearchParams<{ id: string; filter?: string }>();
+  const [currentFilter, setCurrentFilter] = useState<string>(initialFilter || 'all');
 
   const [studySet, setStudySet] = useState<StudySet | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
@@ -58,9 +59,14 @@ export default function FlashcardsScreen() {
 
     try {
       // 1. Gọi song song thông tin bộ học, danh sách thẻ và tiến độ từ backend
+      const cardsEndpoint =
+        currentFilter && currentFilter !== 'all'
+          ? `/study-sets/${id}/cards?filter=${encodeURIComponent(currentFilter)}`
+          : `/study-sets/${id}/cards`;
+
       const [setRes, cardsRes, progressRes] = await Promise.all([
         api.get<StudySet>(`/study-sets/${id}`),
-        api.get<Card[]>(`/study-sets/${id}/cards`),
+        api.get<Card[]>(cardsEndpoint),
         cardProgressService.getStudySetProgress(id),
       ]);
 
@@ -90,7 +96,7 @@ export default function FlashcardsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id, flipAnim]);
+  }, [id, currentFilter, flipAnim]);
 
   useEffect(() => {
     fetchData();
@@ -302,6 +308,18 @@ export default function FlashcardsScreen() {
 
   // Render trạng thái không có thẻ
   if (cards.length === 0) {
+    const isFiltered = currentFilter && currentFilter !== 'all';
+    const filterMessage =
+      currentFilter === 'unlearned'
+        ? 'Bạn đã học tất cả các từ trong bộ này rồi! 🎉'
+        : currentFilter === 'review'
+        ? 'Hiện tại không có từ nào cần ôn tập ngay. Bạn đang làm rất tốt! 👏'
+        : currentFilter === 'weak'
+        ? 'Tuyệt vời! Không có từ nào hay sai cần khắc phục. ✨'
+        : currentFilter === 'mastered'
+        ? 'Chưa có từ nào đạt mức thành thạo. Hãy tiếp tục học nhé!'
+        : 'Bộ học này hiện tại chưa có flashcard nào để học.';
+
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.topBar}>
@@ -316,16 +334,32 @@ export default function FlashcardsScreen() {
           <View style={{ width: 70 }} />
         </View>
         <View style={styles.centerContainer}>
-          <Text style={styles.stateEmoji}>🗂️</Text>
-          <Text style={styles.emptyTitle}>Chưa có thẻ từ vựng</Text>
-          <Text style={styles.stateSubtitle}>
-            Bộ học này hiện tại chưa có flashcard nào để học.
+          <Text style={styles.stateEmoji}>{isFiltered ? '🎯' : '🗂️'}</Text>
+          <Text style={styles.emptyTitle}>
+            {isFiltered ? 'Không có từ trong phạm vi này' : 'Chưa có thẻ từ vựng'}
           </Text>
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={() => router.back()}>
-            <Text style={styles.primaryButtonText}>Quay về bộ học</Text>
-          </TouchableOpacity>
+          <Text style={styles.stateSubtitle}>{filterMessage}</Text>
+          <View style={styles.buttonsRow}>
+            {isFiltered && (
+              <TouchableOpacity
+                style={styles.primaryButton}
+                onPress={() => setCurrentFilter('all')}>
+                <Text style={styles.primaryButtonText}>📚 Học tất cả</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={isFiltered ? styles.secondaryButton : styles.primaryButton}
+              onPress={() => router.back()}>
+              <Text
+                style={
+                  isFiltered
+                    ? styles.secondaryButtonText
+                    : styles.primaryButtonText
+                }>
+                Quay về bộ học
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -427,6 +461,19 @@ export default function FlashcardsScreen() {
             {studySet?.title || 'Flashcards'}
           </Text>
           <View style={styles.progressSubRow}>
+            {currentFilter && currentFilter !== 'all' && (
+              <View style={styles.filterBadge}>
+                <Text style={styles.filterBadgeText}>
+                  {currentFilter === 'unlearned'
+                    ? 'Chưa học'
+                    : currentFilter === 'review'
+                    ? 'Cần ôn'
+                    : currentFilter === 'weak'
+                    ? 'Hay sai'
+                    : 'Đã thuộc'}
+                </Text>
+              </View>
+            )}
             <Text style={styles.counterText}>
               Thẻ {currentIndex + 1} / {totalCards}
             </Text>
@@ -695,6 +742,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 2,
     gap: 6,
+  },
+  filterBadge: {
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  filterBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4255FF',
   },
   counterText: {
     fontSize: 12,

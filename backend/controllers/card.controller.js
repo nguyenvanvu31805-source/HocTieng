@@ -2,7 +2,7 @@ const cardService = require("../services/card.service");
 const {success} = require("../utils/response");
 
 const getCards = async (req, res) => {
-  const cards = await cardService.getCards(req.params.setId, req.user);
+  const cards = await cardService.getCards(req.params.setId, req.user, req.query);
   return success(res, cards, "Cards retrieved successfully");
 };
 

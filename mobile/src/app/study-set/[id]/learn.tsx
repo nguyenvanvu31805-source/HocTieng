@@ -56,7 +56,8 @@ function checkAnswer(userAnswer: string, targetDefinition: string): boolean {
 
 export default function LearnModeScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, filter: initialFilter } = useLocalSearchParams<{ id: string; filter?: string }>();
+  const [currentFilter, setCurrentFilter] = useState<string>(initialFilter || 'all');
 
   const [studySet, setStudySet] = useState<StudySet | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
@@ -84,7 +85,7 @@ export default function LearnModeScreen() {
     try {
       const [setRes, cardsRes] = await Promise.all([
         studySetService.getStudySet(id),
-        cardService.getCards(id),
+        cardService.getCards(id, currentFilter !== 'all' ? currentFilter : undefined),
       ]);
 
       if (setRes.success && setRes.data) {
@@ -97,6 +98,8 @@ export default function LearnModeScreen() {
         setCards(cardsRes.data);
         if (cardsRes.data.length > 0) {
           setShuffledCards(shuffleArray(cardsRes.data));
+        } else {
+          setShuffledCards([]);
         }
       } else {
         setCards([]);
@@ -113,7 +116,7 @@ export default function LearnModeScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, currentFilter]);
 
   useEffect(() => {
     loadData();
@@ -233,6 +236,18 @@ export default function LearnModeScreen() {
   }
 
   if (cards.length === 0 || shuffledCards.length === 0) {
+    const isFiltered = currentFilter && currentFilter !== 'all';
+    const filterMessage =
+      currentFilter === 'unlearned'
+        ? 'Bạn đã học tất cả các từ trong bộ này rồi! 🎉'
+        : currentFilter === 'review'
+        ? 'Hiện tại không có từ nào cần ôn tập ngay. Bạn đang làm rất tốt! 👏'
+        : currentFilter === 'weak'
+        ? 'Tuyệt vời! Không có từ nào hay sai cần khắc phục. ✨'
+        : currentFilter === 'mastered'
+        ? 'Chưa có từ nào đạt mức thành thạo. Hãy tiếp tục học nhé!'
+        : 'Bộ học này chưa có thẻ từ vựng nào để học. Hãy thêm thẻ trước khi bắt đầu.';
+
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.topBar}>
@@ -247,16 +262,32 @@ export default function LearnModeScreen() {
           <View style={{ width: 60 }} />
         </View>
         <View style={styles.centerBox}>
-          <Text style={styles.stateIcon}>📝</Text>
-          <Text style={styles.stateTitle}>Chưa có thẻ từ vựng</Text>
-          <Text style={styles.stateSubtitle}>
-            Bộ học này chưa có thẻ từ vựng nào để học. Hãy thêm thẻ trước khi bắt đầu.
+          <Text style={styles.stateIcon}>{isFiltered ? '🎯' : '📝'}</Text>
+          <Text style={styles.stateTitle}>
+            {isFiltered ? 'Không có từ trong phạm vi này' : 'Chưa có thẻ từ vựng'}
           </Text>
-          <TouchableOpacity
-            style={styles.primaryActionButton}
-            onPress={() => router.back()}>
-            <Text style={styles.primaryActionText}>Quay lại bộ học</Text>
-          </TouchableOpacity>
+          <Text style={styles.stateSubtitle}>{filterMessage}</Text>
+          <View style={styles.emptyButtonsRow}>
+            {isFiltered && (
+              <TouchableOpacity
+                style={styles.primaryActionButton}
+                onPress={() => setCurrentFilter('all')}>
+                <Text style={styles.primaryActionText}>📚 Học tất cả</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={isFiltered ? styles.secondaryActionButton : styles.primaryActionButton}
+              onPress={() => router.back()}>
+              <Text
+                style={
+                  isFiltered
+                    ? styles.secondaryActionText
+                    : styles.primaryActionText
+                }>
+                Quay lại bộ học
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -383,9 +414,24 @@ export default function LearnModeScreen() {
           <Text style={styles.backButtonText}>Thoát</Text>
         </TouchableOpacity>
 
-        <Text style={styles.topBarTitle} numberOfLines={1}>
-          {studySet?.title || 'Học từ vựng'}
-        </Text>
+        <View style={styles.topBarCenter}>
+          <Text style={styles.topBarTitle} numberOfLines={1}>
+            {studySet?.title || 'Học từ vựng'}
+          </Text>
+          {currentFilter && currentFilter !== 'all' && (
+            <View style={styles.filterBadge}>
+              <Text style={styles.filterBadgeText}>
+                {currentFilter === 'unlearned'
+                  ? 'Chưa học'
+                  : currentFilter === 'review'
+                  ? 'Cần ôn'
+                  : currentFilter === 'weak'
+                  ? 'Hay sai'
+                  : 'Đã thuộc'}
+              </Text>
+            </View>
+          )}
+        </View>
 
         <View style={styles.questionCounterBadge}>
           <Text style={styles.questionCounterText}>
@@ -1136,6 +1182,42 @@ const styles = StyleSheet.create({
   },
   primaryActionText: {
     color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  topBarCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  filterBadge: {
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 2,
+  },
+  filterBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4255FF',
+  },
+  emptyButtonsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+  },
+  secondaryActionButton: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#4255FF',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+  },
+  secondaryActionText: {
+    color: '#4255FF',
     fontSize: 14,
     fontWeight: '700',
   },

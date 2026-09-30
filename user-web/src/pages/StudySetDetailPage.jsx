@@ -27,6 +27,7 @@ export default function StudySetDetailPage() {
   const [bookmarkLoading, setBookmarkLoading] = useState(false);
   const [bookmarkNotice, setBookmarkNotice] = useState("");
   const [progressData, setProgressData] = useState(null);
+  const [selectedFilter, setSelectedFilter] = useState("all");
 
   // Card Management States
   const [showCardModal, setShowCardModal] = useState(false);
@@ -380,12 +381,31 @@ export default function StudySetDetailPage() {
         <div className="mode-actions">
           <Link
             className="mode-btn mode-btn-primary"
-            to={`/study-sets/${setId}/flashcards`}
+            to={`/study-sets/${setId}/flashcards${selectedFilter !== "all" ? `?filter=${selectedFilter}` : ""}`}
           >
-            🎴 Thẻ lật
+            🎴 Thẻ lật{selectedFilter !== "all" ? ` • ${
+              selectedFilter === "unlearned"
+                ? "Chưa học"
+                : selectedFilter === "review"
+                ? "Cần ôn"
+                : selectedFilter === "weak"
+                ? "Hay sai"
+                : "Đã thuộc"
+            }` : ""}
           </Link>
-          <Link className="mode-btn" to={`/study-sets/${setId}/learn`}>
-            🧠 Luyện tập
+          <Link
+            className="mode-btn"
+            to={`/study-sets/${setId}/learn${selectedFilter !== "all" ? `?filter=${selectedFilter}` : ""}`}
+          >
+            🧠 Luyện tập{selectedFilter !== "all" ? ` • ${
+              selectedFilter === "unlearned"
+                ? "Chưa học"
+                : selectedFilter === "review"
+                ? "Cần ôn"
+                : selectedFilter === "weak"
+                ? "Hay sai"
+                : "Đã thuộc"
+            }` : ""}
           </Link>
           <Link className="mode-btn" to={`/study-sets/${setId}/test`}>
             📝 Kiểm tra
@@ -463,6 +483,66 @@ export default function StudySetDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Smart Study Session Scope Selector */}
+      {user && cards.length > 0 && (
+        <div className="study-filter-section">
+          <div className="study-filter-header">
+            <div>
+              <h4 className="study-filter-title">🎯 Chọn phạm vi học thông minh</h4>
+              <p className="study-filter-subtitle">
+                Tập trung học nhóm từ bạn cần thay vì học dàn trải toàn bộ bộ từ
+              </p>
+            </div>
+            {selectedFilter !== "all" && (
+              <button
+                type="button"
+                className="button-small button-outline reset-filter-btn"
+                onClick={() => setSelectedFilter("all")}
+              >
+                ✕ Đặt lại tất cả
+              </button>
+            )}
+          </div>
+          <div className="study-filter-chips">
+            <button
+              type="button"
+              className={`study-filter-chip ${selectedFilter === "all" ? "active" : ""}`}
+              onClick={() => setSelectedFilter("all")}
+            >
+              📚 Tất cả ({progressData?.counts?.all ?? cards.length})
+            </button>
+            <button
+              type="button"
+              className={`study-filter-chip ${selectedFilter === "unlearned" ? "active" : ""}`}
+              onClick={() => setSelectedFilter("unlearned")}
+            >
+              🆕 Chưa học ({progressData?.counts?.unlearned ?? Math.max(0, cards.length - (progressData?.studied_cards ?? 0))})
+            </button>
+            <button
+              type="button"
+              className={`study-filter-chip ${selectedFilter === "review" ? "active" : ""}`}
+              onClick={() => setSelectedFilter("review")}
+            >
+              🔄 Cần ôn ({progressData?.counts?.review ?? 0})
+            </button>
+            <button
+              type="button"
+              className={`study-filter-chip ${selectedFilter === "weak" ? "active" : ""}`}
+              onClick={() => setSelectedFilter("weak")}
+            >
+              ⚠️ Hay sai ({progressData?.counts?.weak ?? 0})
+            </button>
+            <button
+              type="button"
+              className={`study-filter-chip ${selectedFilter === "mastered" ? "active" : ""}`}
+              onClick={() => setSelectedFilter("mastered")}
+            >
+              ✅ Đã thuộc ({progressData?.counts?.mastered ?? (progressData?.mastery?.mastered ?? 0)})
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="detail-meta">
         <span>{cards.length} thẻ được tải</span>

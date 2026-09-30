@@ -18,11 +18,23 @@ export interface MasterySummary {
   mastered: number;
 }
 
+export type StudyFilterType = 'all' | 'unlearned' | 'review' | 'weak' | 'mastered';
+
+export interface FilterCounts {
+  all: number;
+  unlearned: number;
+  weak: number;
+  review: number;
+  mastered: number;
+  learning?: number;
+}
+
 export interface StudySetProgress {
   set_id: number;
   total_cards: number;
   studied_cards: number;
   progress_percent: number;
   mastery: MasterySummary;
+  counts?: FilterCounts;
   records: CardProgressRecord[];
 }

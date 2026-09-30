@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useMemo, useState} from "react";
-import {Link, useNavigate, useParams} from "react-router-dom";
+import {Link, useNavigate, useParams, useSearchParams} from "react-router-dom";
 import api from "../services/api";
 import {getErrorMessage} from "../utils/errors";
 
@@ -19,6 +19,8 @@ const normalizeAnswer = (value) =>
 export default function LearnPage() {
   const {setId} = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filter = searchParams.get("filter") || "all";
 
   const [studySet, setStudySet] = useState(null);
   const [cards, setCards] = useState([]);
@@ -74,8 +76,13 @@ export default function LearnPage() {
       const setResponse = await api.get(`/study-sets/${setId}`);
       setStudySet(setResponse.data.data);
 
+      const cardsUrl =
+        filter && filter !== "all"
+          ? `/study-sets/${setId}/cards?filter=${encodeURIComponent(filter)}`
+          : `/study-sets/${setId}/cards`;
+
       const [cardsResponse, progressResponse] = await Promise.all([
-        api.get(`/study-sets/${setId}/cards`),
+        api.get(cardsUrl),
         api.get(`/progress/study-sets/${setId}`),
       ]);
 
@@ -107,7 +114,7 @@ export default function LearnPage() {
         });
       }
     }
-  }, [setId]);
+  }, [setId, filter]);
 
   useEffect(() => {
     fetchData();
@@ -218,20 +225,42 @@ export default function LearnPage() {
   }
 
   if (!cards.length) {
+    const isFiltered = filter && filter !== "all";
+    const filterMessage =
+      filter === "unlearned"
+        ? "Bạn đã học tất cả các từ trong bộ này rồi! 🎉"
+        : filter === "review"
+        ? "Hiện tại không có từ nào cần ôn tập ngay. Bạn đang làm rất tốt! 👏"
+        : filter === "weak"
+        ? "Tuyệt vời! Không có từ nào hay sai cần khắc phục. ✨"
+        : filter === "mastered"
+        ? "Chưa có từ nào đạt mức thành thạo. Hãy tiếp tục học nhé!"
+        : "Vui lòng thêm thẻ vào bộ học trước.";
+
     return (
       <div className="learn-page">
         <Link className="back-link" to={`/study-sets/${setId}`}>
           ← Quay lại bộ học
         </Link>
         <div className="empty-panel">
-          <h2>Study Set này chưa có thẻ để luyện tập.</h2>
-          <p className="muted">Vui lòng thêm thẻ vào bộ học trước.</p>
-          <button
-            className="button-primary"
-            onClick={() => navigate(`/study-sets/${setId}`)}
-          >
-            Quay lại bộ học
-          </button>
+          <h2>{isFiltered ? "Không có thẻ trong phạm vi này" : "Study Set này chưa có thẻ để luyện tập."}</h2>
+          <p className="muted">{filterMessage}</p>
+          <div style={{display: "flex", gap: "12px", justifyContent: "center", marginTop: "20px"}}>
+            {isFiltered && (
+              <button
+                className="button-primary"
+                onClick={() => setSearchParams({})}
+              >
+                📚 Học tất cả
+              </button>
+            )}
+            <button
+              className={isFiltered ? "button-small button-outline" : "button-primary"}
+              onClick={() => navigate(`/study-sets/${setId}`)}
+            >
+              Quay lại bộ học
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -287,7 +316,20 @@ export default function LearnPage() {
           ← Quay lại bộ học
         </Link>
         <div className="learn-title-block">
-          <span className="eyebrow">LUYỆN TẬP</span>
+          <div style={{display: "flex", alignItems: "center", gap: "8px"}}>
+            <span className="eyebrow">LUYỆN TẬP</span>
+            {filter && filter !== "all" && (
+              <span className="study-filter-pill-badge">
+                {filter === "unlearned"
+                  ? "Chưa học"
+                  : filter === "review"
+                  ? "Cần ôn"
+                  : filter === "weak"
+                  ? "Hay sai"
+                  : "Đã thuộc"}
+              </span>
+            )}
+          </div>
           <h1>{studySet?.title}</h1>
         </div>
         <div className="learn-counter">

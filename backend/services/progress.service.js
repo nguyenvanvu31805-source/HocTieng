@@ -82,12 +82,15 @@ const getProgressByStudySet = async (setIdValue, user) => {
     }
   });
 
+  const filterCounts = await cardRepository.countByFilters(setId, userId);
+
   return {
     set_id: setId,
     total_cards: totalCards,
     studied_cards: studiedCards,
     progress_percent: progressPercent,
     mastery,
+    counts: filterCounts,
     records,
   };
 };

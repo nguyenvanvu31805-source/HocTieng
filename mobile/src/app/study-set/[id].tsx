@@ -19,7 +19,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { StudySet } from '@/types/studySet';
 import { Card } from '@/types/card';
-import { StudySetProgress } from '@/types/cardProgress';
+import { StudyFilterType, StudySetProgress } from '@/types/cardProgress';
 import api from '@/services/api';
 import studySetService from '@/services/studySetService';
 import cardService from '@/services/cardService';
@@ -35,6 +35,7 @@ export default function StudySetDetailScreen() {
   const [studySet, setStudySet] = useState<StudySet | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
   const [progress, setProgress] = useState<StudySetProgress | null>(null);
+  const [selectedFilter, setSelectedFilter] = useState<StudyFilterType>('all');
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [bookmarkLoading, setBookmarkLoading] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -507,29 +508,149 @@ export default function StudySetDetailScreen() {
           </View>
         )}
 
-        {/* Khối hiển thị tiến độ học của người dùng (nếu đã học) */}
-        {!!progress && progress.studied_cards > 0 && (
+        {/* Khối hiển thị tiến độ học của người dùng */}
+        {isAuthenticated && cards.length > 0 && (
           <View style={styles.progressCard}>
             <View style={styles.progressHeaderRow}>
               <View style={styles.progressTitleBox}>
                 <Text style={styles.progressEmoji}>📊</Text>
-                <Text style={styles.progressTitle}>Tiến độ học tập</Text>
+                <Text style={styles.progressTitle}>Tiến độ học tập của bạn</Text>
               </View>
               <Text style={styles.progressPercentBadge}>
-                {progress.progress_percent}%
+                {progress?.progress_percent ?? 0}%
               </Text>
             </View>
             <View style={styles.progressBarBg}>
               <View
                 style={[
                   styles.progressBarFill,
-                  { width: `${progress.progress_percent}%` },
+                  { width: `${progress?.progress_percent ?? 0}%` },
                 ]}
               />
             </View>
-            <Text style={styles.progressSubText}>
-              Đã học {progress.studied_cards} / {cards.length || progress.total_cards} thẻ
-            </Text>
+            <View style={styles.progressStatsGrid}>
+              <View style={styles.progressMiniStat}>
+                <Text style={styles.progressMiniStatNumber}>
+                  {progress?.counts?.all ?? cards.length}
+                </Text>
+                <Text style={styles.progressMiniStatLabel}>Tổng số</Text>
+              </View>
+              <View style={styles.progressMiniStat}>
+                <Text style={[styles.progressMiniStatNumber, { color: '#4255FF' }]}>
+                  {progress?.studied_cards ?? 0}
+                </Text>
+                <Text style={styles.progressMiniStatLabel}>Đã học</Text>
+              </View>
+              <View style={styles.progressMiniStat}>
+                <Text style={[styles.progressMiniStatNumber, { color: '#D97706' }]}>
+                  {progress?.counts?.review ?? 0}
+                </Text>
+                <Text style={styles.progressMiniStatLabel}>Cần ôn</Text>
+              </View>
+              <View style={styles.progressMiniStat}>
+                <Text style={[styles.progressMiniStatNumber, { color: '#15803D' }]}>
+                  {progress?.counts?.mastered ?? (progress?.mastery?.mastered ?? 0)}
+                </Text>
+                <Text style={styles.progressMiniStatLabel}>Đã thuộc</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Khối Chọn phạm vi học thông minh */}
+        {isAuthenticated && cards.length > 0 && (
+          <View style={styles.filterSectionCard}>
+            <View style={styles.filterSectionHeader}>
+              <Text style={styles.filterSectionTitle}>🎯 Chọn phạm vi học</Text>
+              <Text style={styles.filterSectionSubtitle}>
+                Tập trung học nhóm từ bạn cần thay vì học dàn trải
+              </Text>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterChipsRow}>
+              <TouchableOpacity
+                style={[
+                  styles.filterChip,
+                  selectedFilter === 'all' && styles.filterChipActive,
+                ]}
+                onPress={() => setSelectedFilter('all')}
+                activeOpacity={0.7}>
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    selectedFilter === 'all' && styles.filterChipTextActive,
+                  ]}>
+                  📚 Tất cả ({progress?.counts?.all ?? cards.length})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.filterChip,
+                  selectedFilter === 'unlearned' && styles.filterChipActive,
+                ]}
+                onPress={() => setSelectedFilter('unlearned')}
+                activeOpacity={0.7}>
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    selectedFilter === 'unlearned' && styles.filterChipTextActive,
+                  ]}>
+                  🆕 Chưa học ({progress?.counts?.unlearned ?? Math.max(0, cards.length - (progress?.studied_cards ?? 0))})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.filterChip,
+                  selectedFilter === 'review' && styles.filterChipActive,
+                ]}
+                onPress={() => setSelectedFilter('review')}
+                activeOpacity={0.7}>
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    selectedFilter === 'review' && styles.filterChipTextActive,
+                  ]}>
+                  🔄 Cần ôn ({progress?.counts?.review ?? 0})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.filterChip,
+                  selectedFilter === 'weak' && styles.filterChipActive,
+                ]}
+                onPress={() => setSelectedFilter('weak')}
+                activeOpacity={0.7}>
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    selectedFilter === 'weak' && styles.filterChipTextActive,
+                  ]}>
+                  ⚠️ Hay sai ({progress?.counts?.weak ?? 0})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.filterChip,
+                  selectedFilter === 'mastered' && styles.filterChipActive,
+                ]}
+                onPress={() => setSelectedFilter('mastered')}
+                activeOpacity={0.7}>
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    selectedFilter === 'mastered' && styles.filterChipTextActive,
+                  ]}>
+                  ✅ Đã thuộc ({progress?.counts?.mastered ?? (progress?.mastery?.mastered ?? 0)})
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         )}
 
@@ -537,13 +658,30 @@ export default function StudySetDetailScreen() {
         {cards.length > 0 && (
           <TouchableOpacity
             style={styles.learnActionButton}
-            onPress={() => router.push(`/study-set/${id}/learn` as any)}
+            onPress={() => {
+              router.push({
+                pathname: `/study-set/${id}/learn` as any,
+                params: selectedFilter !== 'all' ? { filter: selectedFilter } : {},
+              });
+            }}
             activeOpacity={0.8}>
             <Text style={styles.learnActionIcon}>📚</Text>
             <View style={styles.learnActionTextBox}>
-              <Text style={styles.learnActionTitle}>Học (Learn Mode)</Text>
+              <Text style={styles.learnActionTitle}>
+                Học (Learn Mode){selectedFilter !== 'all' ? ` • ${
+                  selectedFilter === 'unlearned' ? 'Chưa học' :
+                  selectedFilter === 'review' ? 'Cần ôn' :
+                  selectedFilter === 'weak' ? 'Hay sai' : 'Đã thuộc'
+                }` : ''}
+              </Text>
               <Text style={styles.learnActionSubtitle}>
-                Ghi nhớ định nghĩa từ vựng từng bước với phản hồi ngay
+                {selectedFilter === 'all'
+                  ? 'Ghi nhớ định nghĩa từ vựng từng bước với phản hồi ngay'
+                  : `Chỉ học các thẻ thuộc nhóm ${
+                      selectedFilter === 'unlearned' ? 'Chưa học' :
+                      selectedFilter === 'review' ? 'Cần ôn' :
+                      selectedFilter === 'weak' ? 'Hay sai' : 'Đã thuộc'
+                    }`}
               </Text>
             </View>
             <Text style={styles.learnActionArrow}>→</Text>
@@ -562,11 +700,21 @@ export default function StudySetDetailScreen() {
                 );
                 return;
               }
-              router.push(`/study-set/${id}/flashcards` as any);
+              router.push({
+                pathname: `/study-set/${id}/flashcards` as any,
+                params: selectedFilter !== 'all' ? { filter: selectedFilter } : {},
+              });
             }}
             activeOpacity={0.8}>
             <Text style={styles.primaryActionIcon}>🗂️</Text>
-            <Text style={styles.primaryActionText}>Flashcards</Text>
+            <Text style={styles.primaryActionText}>
+              Flashcards{selectedFilter !== 'all' ? ` (${
+                selectedFilter === 'unlearned' ? (progress?.counts?.unlearned ?? 0) :
+                selectedFilter === 'review' ? (progress?.counts?.review ?? 0) :
+                selectedFilter === 'weak' ? (progress?.counts?.weak ?? 0) :
+                (progress?.counts?.mastered ?? 0)
+              })` : ''}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1573,6 +1721,77 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#60646C',
+  },
+  progressStatsGrid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F2F7',
+  },
+  progressMiniStat: {
+    alignItems: 'center',
+  },
+  progressMiniStatNumber: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#2E3856',
+  },
+  progressMiniStatLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#939BB4',
+    marginTop: 2,
+  },
+  filterSectionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: '#E8ECF4',
+    marginBottom: 16,
+  },
+  filterSectionHeader: {
+    marginBottom: 12,
+  },
+  filterSectionTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#2E3856',
+    marginBottom: 4,
+  },
+  filterSectionSubtitle: {
+    fontSize: 12,
+    color: '#60646C',
+    lineHeight: 16,
+  },
+  filterChipsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 2,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F0F2F7',
+    borderWidth: 1.5,
+    borderColor: '#E8ECF4',
+  },
+  filterChipActive: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#4255FF',
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#60646C',
+  },
+  filterChipTextActive: {
+    color: '#4255FF',
+    fontWeight: '700',
   },
   topBarBookmarkBtn: {
     paddingVertical: 5,
