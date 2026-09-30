@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useMemo, useState} from "react";
-import {Link, useNavigate, useParams} from "react-router-dom";
+import {Link, useNavigate, useParams, useSearchParams} from "react-router-dom";
 import api from "../services/api";
 import {getErrorMessage} from "../utils/errors";
 
@@ -14,9 +14,12 @@ const calculateScore = (correctAnswers, totalQuestions) =>
 
 export default function TestPage() {
   const {setId} = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const retryResultId = searchParams.get("retryResultId");
   const navigate = useNavigate();
 
   const [studySet, setStudySet] = useState(null);
+  const [allCards, setAllCards] = useState([]);
   const [cards, setCards] = useState([]);
   const [answers, setAnswers] = useState([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -26,6 +29,7 @@ export default function TestPage() {
   const [result, setResult] = useState(null);
   const [submitError, setSubmitError] = useState("");
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
+  const [isRetrySession, setIsRetrySession] = useState(false);
   const [state, setState] = useState({loading: true, error: "", notFound: false});
 
   const playAudio = (e, url, term) => {
@@ -59,13 +63,52 @@ export default function TestPage() {
     setShowConfirmSubmit(false);
 
     try {
-      const setResponse = await api.get(`/study-sets/${setId}`);
-      setStudySet(setResponse.data.data);
+      const [setResponse, cardsResponse] = await Promise.all([
+        api.get(`/study-sets/${setId}`),
+        api.get(`/study-sets/${setId}/cards`),
+      ]);
 
-      const cardsResponse = await api.get(`/study-sets/${setId}/cards`);
+      const setData = setResponse.data.data;
       const nextCards = cardsResponse.data.data || [];
-      setCards(nextCards);
-      setAnswers(Array(nextCards.length).fill(""));
+      setStudySet(setData);
+      setAllCards(nextCards);
+
+      if (!nextCards.length) {
+        setCards([]);
+        setAnswers([]);
+        setIsRetrySession(false);
+        setState({loading: false, error: "", notFound: false});
+        return;
+      }
+
+      if (retryResultId) {
+        try {
+          const res = await api.get(`/test-results/${retryResultId}`);
+          const prevResult = res.data.data;
+          const incorrectIds = prevResult?.incorrect_card_ids || [];
+          const wrongCards = nextCards.filter((c) => incorrectIds.includes(c.card_id));
+
+          if (wrongCards.length > 0) {
+            setCards(wrongCards);
+            setAnswers(Array(wrongCards.length).fill(""));
+            setIsRetrySession(true);
+          } else {
+            setCards(nextCards);
+            setAnswers(Array(nextCards.length).fill(""));
+            setIsRetrySession(false);
+          }
+        } catch (retryErr) {
+          console.warn("Lỗi khi tải câu hỏi làm lại:", retryErr);
+          setCards(nextCards);
+          setAnswers(Array(nextCards.length).fill(""));
+          setIsRetrySession(false);
+        }
+      } else {
+        setCards(nextCards);
+        setAnswers(Array(nextCards.length).fill(""));
+        setIsRetrySession(false);
+      }
+
       setState({loading: false, error: "", notFound: false});
     } catch (error) {
       const status = error?.response?.status;
@@ -83,7 +126,7 @@ export default function TestPage() {
         });
       }
     }
-  }, [setId]);
+  }, [setId, retryResultId]);
 
   useEffect(() => {
     fetchData();
@@ -125,7 +168,7 @@ export default function TestPage() {
       const userAnswer = finalAnswers[index] || "";
       const correct =
         normalizeAnswer(userAnswer) === normalizeAnswer(card.definition);
-      return {card, userAnswer, correct};
+      return {card, userAnswer, correct, correctAnswer: card.definition};
     });
     const correctAnswers = details.filter((item) => item.correct).length;
     const totalQuestions = cards.length;
@@ -148,16 +191,50 @@ export default function TestPage() {
     setSubmitError("");
     setShowConfirmSubmit(false);
 
-    const nextResult = buildResult(finalAnswers);
+    const details = cards.map((card, index) => ({
+      card_id: card.card_id,
+      question_order: index + 1,
+      user_answer: finalAnswers[index] || "",
+    }));
 
     try {
       const {data} = await api.post("/test-results", {
         set_id: Number(setId),
-        total_questions: nextResult.totalQuestions,
-        correct_answers: nextResult.correctAnswers,
-        score: nextResult.score,
+        total_questions: cards.length,
+        details,
       });
-      setResult({...nextResult, savedResult: data.data});
+
+      const savedResult = data.data;
+      if (savedResult?.details && savedResult.details.length > 0) {
+        const resultDetails = savedResult.details.map((d) => ({
+          card: {
+            card_id: d.card_id,
+            term: d.term,
+            definition: d.correct_answer || d.definition,
+            pronunciation: d.pronunciation,
+            example: d.example,
+            audio_url: d.audio_url,
+          },
+          userAnswer: d.user_answer || "",
+          correctAnswer: d.correct_answer,
+          correct: Boolean(d.is_correct),
+        }));
+
+        setResult({
+          totalQuestions: savedResult.total_questions,
+          correctAnswers: savedResult.correct_answers,
+          wrongAnswers: savedResult.total_questions - savedResult.correct_answers,
+          score:
+            typeof savedResult.score === "string"
+              ? parseFloat(savedResult.score)
+              : savedResult.score,
+          details: resultDetails,
+          savedResult,
+        });
+      } else {
+        const nextResult = buildResult(finalAnswers);
+        setResult({...nextResult, savedResult});
+      }
       setCompleted(true);
     } catch (error) {
       setSubmitError(
@@ -177,14 +254,56 @@ export default function TestPage() {
     submitTest();
   };
 
-  const handleRestart = () => {
-    setAnswers(Array(cards.length).fill(""));
+  const handleRestartAll = () => {
+    const targetCards = allCards.length ? allCards : cards;
+    setCards(targetCards);
+    setAnswers(Array(targetCards.length).fill(""));
     setCurrentQuestionIndex(0);
     setCurrentAnswer("");
     setCompleted(false);
     setResult(null);
     setSubmitError("");
     setShowConfirmSubmit(false);
+    setIsRetrySession(false);
+    setSearchParams({});
+  };
+
+  const handleRetryIncorrect = () => {
+    if (!result) return;
+    let wrongCardIds = [];
+    if (result.savedResult?.incorrect_card_ids) {
+      wrongCardIds = result.savedResult.incorrect_card_ids;
+    } else {
+      wrongCardIds = result.details
+        .filter((d) => !d.correct)
+        .map((d) => d.card.card_id);
+    }
+
+    if (!wrongCardIds.length) {
+      alert("Chúc mừng! Bạn đã trả lời đúng tất cả các câu.");
+      return;
+    }
+
+    const pool = allCards.length ? allCards : cards;
+    const wrongCards = pool.filter((c) => wrongCardIds.includes(c.card_id));
+    if (!wrongCards.length) {
+      alert("Không tìm thấy thẻ câu sai để làm lại.");
+      return;
+    }
+
+    setCards(wrongCards);
+    setAnswers(Array(wrongCards.length).fill(""));
+    setCurrentQuestionIndex(0);
+    setCurrentAnswer("");
+    setCompleted(false);
+    setResult(null);
+    setSubmitError("");
+    setShowConfirmSubmit(false);
+    setIsRetrySession(true);
+
+    if (result.savedResult?.result_id) {
+      setSearchParams({retryResultId: String(result.savedResult.result_id)});
+    }
   };
 
   if (state.loading) {
@@ -286,7 +405,7 @@ export default function TestPage() {
                 className={`test-detail-item ${
                   item.correct ? "correct" : "wrong"
                 }`}
-                key={item.card.card_id}
+                key={item.card?.card_id || index}
               >
                 <span className="vocab-index">
                   {String(index + 1).padStart(2, "0")}
@@ -311,11 +430,24 @@ export default function TestPage() {
                     </span>
                   )}
                   <p>
-                    Bạn trả lời: <b>{item.userAnswer || "Chưa trả lời"}</b>
+                    Bạn trả lời:{" "}
+                    <b style={{color: item.correct ? "#15803d" : "#dc2626"}}>
+                      {item.userAnswer || "Chưa trả lời"}
+                    </b>
                   </p>
-                  <p>
-                    Đáp án: <b>{item.card.definition}</b>
-                  </p>
+                  {!item.correct && (
+                    <p>
+                      Đáp án đúng:{" "}
+                      <b style={{color: "#15803d"}}>
+                        {item.correctAnswer || item.card.definition}
+                      </b>
+                    </p>
+                  )}
+                  {item.correct && (
+                    <p>
+                      Đáp án: <b>{item.correctAnswer || item.card.definition}</b>
+                    </p>
+                  )}
                   {Boolean(item.card.example && item.card.example.trim()) && (
                     <div className="card-example-box" style={{marginTop: "8px"}}>
                       <span className="example-label">💬 Ví dụ:</span>
@@ -325,17 +457,26 @@ export default function TestPage() {
                     </div>
                   )}
                 </div>
-                <strong>{item.correct ? "Đúng" : "Sai"}</strong>
+                <strong>{item.correct ? "✓ Đúng" : "✕ Sai"}</strong>
               </article>
             ))}
           </div>
 
           <div className="completion-actions">
-            <button className="button-primary" onClick={handleRestart}>
-              Làm lại
+            {result.wrongAnswers > 0 && (
+              <button
+                className="button-primary"
+                style={{backgroundColor: "#ea580c", borderColor: "#ea580c"}}
+                onClick={handleRetryIncorrect}
+              >
+                🔄 Làm lại câu sai ({result.wrongAnswers} câu)
+              </button>
+            )}
+            <button className="button-secondary" onClick={handleRestartAll}>
+              🔁 Làm lại toàn bộ bài
             </button>
             <button
-              className="button-small button-secondary"
+              className="button-small button-outline"
               onClick={() => navigate(`/study-sets/${setId}`)}
             >
               ← Quay lại bộ học
@@ -353,7 +494,24 @@ export default function TestPage() {
           ← Quay lại bộ học
         </Link>
         <div className="test-title-block">
-          <span className="eyebrow">KIỂM TRA</span>
+          <div style={{display: "flex", alignItems: "center", gap: "8px"}}>
+            <span className="eyebrow">KIỂM TRA</span>
+            {isRetrySession && (
+              <span
+                style={{
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  color: "#c2410c",
+                  backgroundColor: "#fff7ed",
+                  padding: "2px 8px",
+                  borderRadius: "4px",
+                  border: "1px solid #fed7aa",
+                }}
+              >
+                Làm lại câu sai
+              </span>
+            )}
+          </div>
           <h1>{studySet?.title}</h1>
         </div>
         <div className="test-counter">

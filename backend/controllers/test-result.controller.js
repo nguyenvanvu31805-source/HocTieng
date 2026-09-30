@@ -6,4 +6,12 @@ const createTestResult = async (req, res) => {
   return success(res, result, "Test result saved successfully", 201);
 };
 
-module.exports = {createTestResult};
+const getTestResult = async (req, res) => {
+  const result = await testResultService.getTestResult(req.user, req.params.resultId);
+  return success(res, result, "Test result retrieved successfully", 200);
+};
+
+module.exports = {
+  createTestResult,
+  getTestResult,
+};

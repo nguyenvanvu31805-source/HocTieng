@@ -11,4 +11,10 @@ router.post(
   asyncHandler(testResultController.createTestResult),
 );
 
+router.get(
+  "/test-results/:resultId",
+  authenticate,
+  asyncHandler(testResultController.getTestResult),
+);
+
 module.exports = router;

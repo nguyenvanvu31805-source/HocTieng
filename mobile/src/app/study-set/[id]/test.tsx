@@ -21,7 +21,6 @@ import {
 } from '@/types/testResult';
 import api from '@/services/api';
 import testResultService from '@/services/testResultService';
-import cardProgressService from '@/services/cardProgressService';
 import { playAudio } from '@/utils/audioPlayer';
 
 const { width } = Dimensions.get('window');
@@ -37,14 +36,15 @@ function shuffleArray<T>(array: T[]): T[] {
 }
 
 // Xây dựng danh sách câu hỏi trắc nghiệm A, B, C, D từ danh sách thẻ
-function buildQuizQuestions(cards: Card[]): QuizQuestion[] {
+// Cho phép truyền allCards để lựa chọn đáp án nhiễu (distractors) ngay cả khi chỉ làm lại một số câu
+function buildQuizQuestions(cards: Card[], allCards: Card[] = cards): QuizQuestion[] {
   const labels = ['A', 'B', 'C', 'D'];
 
   return cards.map((card) => {
     // Thu thập các định nghĩa của các thẻ khác để làm đáp án nhiễu (distractors)
     const otherDefinitions = Array.from(
       new Set(
-        cards
+        allCards
           .filter((c) => c.card_id !== card.card_id && !!c.definition?.trim())
           .map((c) => c.definition.trim()),
       ),
@@ -78,10 +78,11 @@ function buildQuizQuestions(cards: Card[]): QuizQuestion[] {
 
 export default function TestScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, retryResultId } = useLocalSearchParams<{ id: string; retryResultId?: string }>();
   const { isAuthenticated } = useAuth();
 
   const [studySet, setStudySet] = useState<StudySet | null>(null);
+  const [allCards, setAllCards] = useState<Card[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [selectedAnswers, setSelectedAnswers] = useState<{ [index: number]: string }>({});
@@ -91,6 +92,8 @@ export default function TestScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [quizSummary, setQuizSummary] = useState<QuizSummary | null>(null);
+  const [isRetrySession, setIsRetrySession] = useState(false);
+  const [showDetails, setShowDetails] = useState(true);
 
   // Tải dữ liệu bộ học và các thẻ
   const fetchTestData = useCallback(async () => {
@@ -113,13 +116,46 @@ export default function TestScreen() {
         throw new Error(setRes.message || 'Không tìm thấy bộ học.');
       }
 
-      if (cardsRes.success && Array.isArray(cardsRes.data)) {
-        setCards(cardsRes.data);
-        const generatedQuestions = buildQuizQuestions(cardsRes.data);
-        setQuestions(generatedQuestions);
-      } else {
+      const fullCards = cardsRes.success && Array.isArray(cardsRes.data) ? cardsRes.data : [];
+      setAllCards(fullCards);
+
+      if (fullCards.length === 0) {
         setCards([]);
         setQuestions([]);
+        setIsRetrySession(false);
+        return;
+      }
+
+      // Nếu có retryResultId, thử lấy danh sách câu hỏi đã trả lời sai ở lần thi trước
+      if (retryResultId) {
+        try {
+          const prevResult = await testResultService.getTestResult(retryResultId);
+          const incorrectIds = prevResult?.incorrect_card_ids || [];
+          const wrongCards = fullCards.filter((c) => incorrectIds.includes(c.card_id));
+
+          if (wrongCards.length > 0) {
+            setCards(wrongCards);
+            setQuestions(buildQuizQuestions(wrongCards, fullCards));
+            setIsRetrySession(true);
+          } else {
+            Alert.alert(
+              'Thông báo',
+              'Không có câu hỏi trả lời sai để làm lại. Bắt đầu bài kiểm tra đầy đủ.',
+            );
+            setCards(fullCards);
+            setQuestions(buildQuizQuestions(fullCards, fullCards));
+            setIsRetrySession(false);
+          }
+        } catch (retryErr) {
+          console.warn('Lỗi khi tải câu sai để làm lại:', retryErr);
+          setCards(fullCards);
+          setQuestions(buildQuizQuestions(fullCards, fullCards));
+          setIsRetrySession(false);
+        }
+      } else {
+        setCards(fullCards);
+        setQuestions(buildQuizQuestions(fullCards, fullCards));
+        setIsRetrySession(false);
       }
     } catch (err: any) {
       const msg =
@@ -132,7 +168,7 @@ export default function TestScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, retryResultId]);
 
   useEffect(() => {
     fetchTestData();
@@ -153,66 +189,92 @@ export default function TestScreen() {
     }));
   };
 
-  // Nộp bài và tính điểm
+  // Nộp bài và lưu kết quả chi tiết
   const executeSubmit = async () => {
     if (submitting || !questions.length) return;
     setSubmitting(true);
 
     try {
-      // 1. Tính toán kết quả chi tiết từng câu
-      const details = questions.map((q, idx) => {
-        const userChoice = selectedAnswers[idx] || '';
-        const isCorrect =
-          userChoice.trim().toLowerCase() === q.correctDefinition.trim().toLowerCase();
-        return {
-          questionNumber: idx + 1,
-          term: q.term,
-          pronunciation: q.pronunciation,
-          example: q.example,
-          audio_url: q.audio_url,
-          userAnswer: userChoice,
-          correctAnswer: q.correctDefinition,
-          isCorrect,
-        };
-      });
+      // 1. Chuẩn bị payload chi tiết cho backend
+      const detailsInput = questions.map((q, idx) => ({
+        card_id: q.card_id,
+        question_order: idx + 1,
+        user_answer: selectedAnswers[idx] || '',
+      }));
 
       const totalQuestions = questions.length;
-      const correctAnswers = details.filter((d) => d.isCorrect).length;
-      const wrongAnswers = totalQuestions - correctAnswers;
-      const score = Number(((correctAnswers / totalQuestions) * 100).toFixed(2));
 
-      // 2. Gửi kết quả lên backend qua POST /test-results
+      // 2. Gửi kết quả lên backend (Backend tự động chấm điểm, lưu snapshot và cập nhật card_progress)
       let savedResult = null;
       try {
         savedResult = await testResultService.submitTestResult({
           set_id: Number(id),
           total_questions: totalQuestions,
-          correct_answers: correctAnswers,
-          score,
+          details: detailsInput,
         });
       } catch (submitErr) {
         console.warn('Không thể lưu kết quả bài kiểm tra lên server:', submitErr);
       }
 
-      // 3. Cập nhật tiến độ card_progress cho các thẻ (nếu đã đăng nhập)
-      if (isAuthenticated) {
-        details.forEach((d, idx) => {
-          const cardId = questions[idx]?.card_id;
-          if (cardId) {
-            cardProgressService.reviewCard(cardId, d.isCorrect).catch(() => {});
-          }
+      // 3. Hiển thị màn hình kết quả từ dữ liệu backend (hoặc fallback tính toán nếu cần)
+      if (savedResult?.details && savedResult.details.length > 0) {
+        const resultDetails = savedResult.details.map((d) => ({
+          questionNumber: d.question_order,
+          card_id: d.card_id,
+          term: d.term,
+          pronunciation: d.pronunciation,
+          example: d.example,
+          audio_url: d.audio_url,
+          userAnswer: d.user_answer || '',
+          correctAnswer: d.correct_answer,
+          isCorrect: Boolean(d.is_correct),
+        }));
+
+        const scoreVal =
+          typeof savedResult.score === 'string'
+            ? parseFloat(savedResult.score)
+            : savedResult.score;
+
+        setQuizSummary({
+          totalQuestions: savedResult.total_questions,
+          correctAnswers: savedResult.correct_answers,
+          wrongAnswers: savedResult.total_questions - savedResult.correct_answers,
+          score: scoreVal,
+          savedResult,
+          details: resultDetails,
+        });
+      } else {
+        // Fallback offline / local grading
+        const fallbackDetails = questions.map((q, idx) => {
+          const userChoice = selectedAnswers[idx] || '';
+          const isCorrect =
+            userChoice.trim().toLowerCase() === q.correctDefinition.trim().toLowerCase();
+          return {
+            questionNumber: idx + 1,
+            card_id: q.card_id,
+            term: q.term,
+            pronunciation: q.pronunciation,
+            example: q.example,
+            audio_url: q.audio_url,
+            userAnswer: userChoice,
+            correctAnswer: q.correctDefinition,
+            isCorrect,
+          };
+        });
+
+        const correctAnswers = fallbackDetails.filter((d) => d.isCorrect).length;
+        const wrongAnswers = totalQuestions - correctAnswers;
+        const score = Number(((correctAnswers / totalQuestions) * 100).toFixed(2));
+
+        setQuizSummary({
+          totalQuestions,
+          correctAnswers,
+          wrongAnswers,
+          score,
+          savedResult: null,
+          details: fallbackDetails,
         });
       }
-
-      // 4. Hiển thị màn hình kết quả
-      setQuizSummary({
-        totalQuestions,
-        correctAnswers,
-        wrongAnswers,
-        score,
-        savedResult,
-        details,
-      });
     } catch (err: any) {
       Alert.alert(
         'Lỗi nộp bài',
@@ -239,13 +301,56 @@ export default function TestScreen() {
     }
   };
 
-  // Làm lại bài kiểm tra (xáo trộn lại câu hỏi và các lựa chọn)
-  const handleRestartQuiz = () => {
+  // Làm lại toàn bộ bài kiểm tra (tất cả các câu trong bộ học)
+  const handleRestartAll = () => {
     setSelectedAnswers({});
     setCurrentIndex(0);
     setQuizSummary(null);
-    if (cards.length > 0) {
-      setQuestions(buildQuizQuestions(cards));
+    setIsRetrySession(false);
+    if (allCards.length > 0) {
+      setCards(allCards);
+      setQuestions(buildQuizQuestions(allCards, allCards));
+    } else if (cards.length > 0) {
+      setQuestions(buildQuizQuestions(cards, cards));
+    }
+    router.setParams({ retryResultId: undefined });
+  };
+
+  // Làm lại các câu sai của bài kiểm tra vừa làm
+  const handleRetryIncorrect = () => {
+    if (!quizSummary) return;
+
+    let wrongCardIds: number[] = [];
+    if (quizSummary.savedResult?.incorrect_card_ids) {
+      wrongCardIds = quizSummary.savedResult.incorrect_card_ids;
+    } else {
+      wrongCardIds = quizSummary.details
+        .filter((d) => !d.isCorrect && d.card_id)
+        .map((d) => d.card_id as number);
+    }
+
+    if (wrongCardIds.length === 0) {
+      Alert.alert('Chúc mừng!', 'Bạn đã trả lời đúng tất cả các câu hỏi.');
+      return;
+    }
+
+    const availableCards = allCards.length > 0 ? allCards : cards;
+    const wrongCards = availableCards.filter((c) => wrongCardIds.includes(c.card_id));
+
+    if (wrongCards.length === 0) {
+      Alert.alert('Thông báo', 'Không tìm thấy thẻ câu sai tương ứng.');
+      return;
+    }
+
+    setSelectedAnswers({});
+    setCurrentIndex(0);
+    setQuizSummary(null);
+    setIsRetrySession(true);
+    setCards(wrongCards);
+    setQuestions(buildQuizQuestions(wrongCards, availableCards));
+
+    if (quizSummary.savedResult?.result_id) {
+      router.setParams({ retryResultId: String(quizSummary.savedResult.result_id) });
     }
   };
 
@@ -402,11 +507,21 @@ export default function TestScreen() {
 
             {/* Nút hành động */}
             <View style={styles.resultActionButtons}>
+              {quizSummary.wrongAnswers > 0 && (
+                <TouchableOpacity
+                  style={styles.retryIncorrectBtn}
+                  onPress={handleRetryIncorrect}
+                  activeOpacity={0.8}>
+                  <Text style={styles.retryIncorrectBtnText}>
+                    🔄 Làm lại câu sai ({quizSummary.wrongAnswers} câu)
+                  </Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={styles.restartQuizBtn}
-                onPress={handleRestartQuiz}
+                onPress={handleRestartAll}
                 activeOpacity={0.8}>
-                <Text style={styles.restartQuizBtnText}>🔄 Làm lại bài kiểm tra</Text>
+                <Text style={styles.restartQuizBtnText}>🔁 Làm lại toàn bộ bài kiểm tra</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.backToSetBtn}
@@ -418,77 +533,91 @@ export default function TestScreen() {
           </View>
 
           {/* Chi tiết từng câu hỏi */}
-          <Text style={styles.detailsSectionTitle}>Chi tiết câu trả lời</Text>
-          {quizSummary.details.map((item) => (
-            <View
-              key={item.questionNumber}
-              style={[
-                styles.detailItemCard,
-                item.isCorrect ? styles.detailItemCorrect : styles.detailItemWrong,
-              ]}>
-              <View style={styles.detailItemHeader}>
-                <Text style={styles.detailQuestionNum}>Câu {item.questionNumber}</Text>
-                <View
-                  style={[
-                    styles.detailStatusBadge,
-                    item.isCorrect ? styles.statusBadgeCorrect : styles.statusBadgeWrong,
-                  ]}>
-                  <Text
+          <View style={styles.detailsHeaderRow}>
+            <Text style={styles.detailsSectionTitle}>
+              Chi tiết câu trả lời ({quizSummary.details.length})
+            </Text>
+            <TouchableOpacity
+              style={styles.toggleDetailsBtn}
+              onPress={() => setShowDetails((prev) => !prev)}
+              activeOpacity={0.7}>
+              <Text style={styles.toggleDetailsBtnText}>
+                {showDetails ? 'Thu gọn ▲' : 'Xem chi tiết ▼'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {showDetails &&
+            quizSummary.details.map((item) => (
+              <View
+                key={item.questionNumber}
+                style={[
+                  styles.detailItemCard,
+                  item.isCorrect ? styles.detailItemCorrect : styles.detailItemWrong,
+                ]}>
+                <View style={styles.detailItemHeader}>
+                  <Text style={styles.detailQuestionNum}>Câu {item.questionNumber}</Text>
+                  <View
                     style={[
-                      styles.detailStatusText,
-                      item.isCorrect ? styles.statusTextCorrect : styles.statusTextWrong,
+                      styles.detailStatusBadge,
+                      item.isCorrect ? styles.statusBadgeCorrect : styles.statusBadgeWrong,
                     ]}>
-                    {item.isCorrect ? '✓ Đúng' : '✕ Sai'}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.detailTermRow}>
-                <Text style={styles.detailTermText}>{item.term}</Text>
-                {Boolean(item.audio_url && item.audio_url.trim()) && (
-                  <TouchableOpacity
-                    style={styles.audioBtn}
-                    onPress={() => playAudio(item.audio_url)}
-                    activeOpacity={0.7}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Text style={styles.audioBtnText}>🔊</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              {Boolean(item.pronunciation && item.pronunciation.trim()) && (
-                <Text style={styles.detailPronunciation}>{item.pronunciation?.trim()}</Text>
-              )}
-
-              <View style={styles.detailAnswersBlock}>
-                <View style={styles.answerComparisonRow}>
-                  <Text style={styles.answerComparisonLabel}>Bạn chọn:</Text>
-                  <Text
-                    style={[
-                      styles.answerComparisonValue,
-                      item.isCorrect ? styles.textCorrect : styles.textWrong,
-                    ]}>
-                    {item.userAnswer || 'Chưa trả lời'}
-                  </Text>
-                </View>
-
-                {!item.isCorrect && (
-                  <View style={styles.answerComparisonRow}>
-                    <Text style={styles.answerComparisonLabel}>Đáp án đúng:</Text>
-                    <Text style={[styles.answerComparisonValue, styles.textCorrect]}>
-                      {item.correctAnswer}
+                    <Text
+                      style={[
+                        styles.detailStatusText,
+                        item.isCorrect ? styles.statusTextCorrect : styles.statusTextWrong,
+                      ]}>
+                      {item.isCorrect ? '✓ Đúng' : '✕ Sai'}
                     </Text>
+                  </View>
+                </View>
+
+                <View style={styles.detailTermRow}>
+                  <Text style={styles.detailTermText}>{item.term}</Text>
+                  {Boolean(item.audio_url && item.audio_url.trim()) && (
+                    <TouchableOpacity
+                      style={styles.audioBtn}
+                      onPress={() => playAudio(item.audio_url)}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Text style={styles.audioBtnText}>🔊</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {Boolean(item.pronunciation && item.pronunciation.trim()) && (
+                  <Text style={styles.detailPronunciation}>{item.pronunciation?.trim()}</Text>
+                )}
+
+                <View style={styles.detailAnswersBlock}>
+                  <View style={styles.answerComparisonRow}>
+                    <Text style={styles.answerComparisonLabel}>Bạn chọn:</Text>
+                    <Text
+                      style={[
+                        styles.answerComparisonValue,
+                        item.isCorrect ? styles.textCorrect : styles.textWrong,
+                      ]}>
+                      {item.userAnswer || 'Chưa trả lời'}
+                    </Text>
+                  </View>
+
+                  {!item.isCorrect && (
+                    <View style={styles.answerComparisonRow}>
+                      <Text style={styles.answerComparisonLabel}>Đáp án đúng:</Text>
+                      <Text style={[styles.answerComparisonValue, styles.textCorrect]}>
+                        {item.correctAnswer}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {Boolean(item.example && item.example.trim()) && (
+                  <View style={styles.detailExampleBox}>
+                    <Text style={styles.detailExampleLabel}>💬 Ví dụ:</Text>
+                    <Text style={styles.detailExampleText}>"{item.example?.trim()}"</Text>
                   </View>
                 )}
               </View>
-
-              {Boolean(item.example && item.example.trim()) && (
-                <View style={styles.detailExampleBox}>
-                  <Text style={styles.detailExampleLabel}>💬 Ví dụ:</Text>
-                  <Text style={styles.detailExampleText}>"{item.example?.trim()}"</Text>
-                </View>
-              )}
-            </View>
-          ))}
+            ))}
         </ScrollView>
       </SafeAreaView>
     );
@@ -512,6 +641,11 @@ export default function TestScreen() {
           <Text style={styles.topBarTitle} numberOfLines={1}>
             {studySet?.title || 'Luyện tập'}
           </Text>
+          {isRetrySession && (
+            <View style={styles.retryBadgeTop}>
+              <Text style={styles.retryBadgeTopText}>Làm lại câu sai</Text>
+            </View>
+          )}
           <Text style={styles.counterText}>
             Câu {currentIndex + 1} / {questions.length}
           </Text>
@@ -1116,6 +1250,22 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
+  retryIncorrectBtn: {
+    backgroundColor: '#EA580C',
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    shadowColor: '#EA580C',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  retryIncorrectBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
   backToSetBtn: {
     backgroundColor: '#F0F2F7',
     paddingVertical: 13,
@@ -1127,11 +1277,42 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
+  detailsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  toggleDetailsBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    backgroundColor: '#EEF2FF',
+    borderRadius: 8,
+  },
+  toggleDetailsBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4255FF',
+  },
+  retryBadgeTop: {
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 2,
+  },
+  retryBadgeTopText: {
+    fontSize: 11,
+    color: '#C2410C',
+    fontWeight: '700',
+  },
   detailsSectionTitle: {
     fontSize: 17,
     fontWeight: '800',
     color: '#2E3856',
-    marginBottom: 12,
+    marginBottom: 0,
   },
   detailItemCard: {
     backgroundColor: '#FFFFFF',

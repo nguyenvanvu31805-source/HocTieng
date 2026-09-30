@@ -197,11 +197,25 @@ const countByFilters = async (setId, userId) => {
   };
 };
 
+const findByIds = async (cardIds, setId = null) => {
+  if (!cardIds || !cardIds.length) return [];
+  const placeholders = cardIds.map(() => '?').join(', ');
+  const params = [...cardIds];
+  let sql = `SELECT ${cardColumns} FROM cards WHERE card_id IN (${placeholders})`;
+  if (setId !== null) {
+    sql += ` AND set_id = ?`;
+    params.push(setId);
+  }
+  const [rows] = await pool.query(sql, params);
+  return rows;
+};
+
 module.exports = {
   findBySetId,
   findBySetIdAndFilter,
   countByFilters,
   findById,
+  findByIds,
   findNextPosition,
   create,
   update,
