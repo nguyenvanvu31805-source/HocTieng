@@ -22,6 +22,7 @@ import {
 import api from '@/services/api';
 import testResultService from '@/services/testResultService';
 import { playAudio } from '@/utils/audioPlayer';
+import useStudySession from '@/hooks/useStudySession';
 
 const { width } = Dimensions.get('window');
 
@@ -94,6 +95,12 @@ export default function TestScreen() {
   const [quizSummary, setQuizSummary] = useState<QuizSummary | null>(null);
   const [isRetrySession, setIsRetrySession] = useState(false);
   const [showDetails, setShowDetails] = useState(true);
+
+  // Tích hợp study session và streak cho Test mode
+  const { recordCardStudied, completeSession } = useStudySession({
+    setId: id,
+    mode: 'TEST',
+  });
 
   // Tải dữ liệu bộ học và các thẻ
   const fetchTestData = useCallback(async () => {
@@ -183,10 +190,14 @@ export default function TestScreen() {
 
   // Xử lý chọn đáp án cho câu hỏi hiện tại
   const handleSelectOption = (optionText: string) => {
-    setSelectedAnswers((prev) => ({
-      ...prev,
-      [currentIndex]: optionText,
-    }));
+    setSelectedAnswers((prev) => {
+      const updated = {
+        ...prev,
+        [currentIndex]: optionText,
+      };
+      recordCardStudied(Object.keys(updated).length);
+      return updated;
+    });
   };
 
   // Nộp bài và lưu kết quả chi tiết
@@ -243,6 +254,8 @@ export default function TestScreen() {
           savedResult,
           details: resultDetails,
         });
+
+        completeSession({ score: scoreVal, cardsStudied: savedResult.total_questions });
       } else {
         // Fallback offline / local grading
         const fallbackDetails = questions.map((q, idx) => {

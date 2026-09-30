@@ -8,6 +8,7 @@ const testResultRoutes = require("./test-result.routes");
 const bookmarkRoutes = require("./bookmark.routes");
 const classRoutes = require("./class.routes");
 const assignmentRoutes = require("./assignment.routes");
+const studySessionRoutes = require("./study-session.routes");
 
 const router = express.Router();
 
@@ -19,6 +20,7 @@ router.use(studySetRoutes);
 router.use(adminRoutes);
 router.use(cardRoutes);
 router.use(progressRoutes);
+router.use(studySessionRoutes);
 router.use(testResultRoutes);
 router.use(bookmarkRoutes);
 router.use(classRoutes);

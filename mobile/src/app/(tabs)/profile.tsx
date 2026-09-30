@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,13 +14,29 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import userService from '@/services/userService';
+import studySessionService from '@/services/studySessionService';
+import { StudyStats } from '@/types/studySession';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, isAuthenticated, logout, updateUser, refreshUser } = useAuth();
+
+  const [studyStats, setStudyStats] = useState<StudyStats | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!isAuthenticated) return;
+      studySessionService
+        .getStudyStats()
+        .then((res) => {
+          if (res) setStudyStats(res);
+        })
+        .catch(() => {});
+    }, [isAuthenticated]),
+  );
 
   // Trạng thái modal Chỉnh sửa hồ sơ
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -139,6 +155,41 @@ export default function ProfileScreen() {
             <View style={styles.roleBadge}>
               <Text style={styles.roleBadgeText}>Vai trò: {user.role}</Text>
             </View>
+
+            {/* Thống kê chuỗi học tập */}
+            {studyStats && (
+              <View style={styles.statsCardBox}>
+                <View style={styles.statsCardHeader}>
+                  <Text style={styles.statsCardTitle}>🔥 CHUỖI HỌC TẬP</Text>
+                  <Text style={styles.statsCardStatus}>
+                    {studyStats.today_studied ? 'Đã học hôm nay 🎉' : 'Chưa học hôm nay ⏳'}
+                  </Text>
+                </View>
+                <View style={styles.profileStatsRow}>
+                  <View style={styles.profileStatItem}>
+                    <Text style={styles.profileStatVal}>🔥 {studyStats.current_streak}</Text>
+                    <Text style={styles.profileStatLbl}>Chuỗi ngày</Text>
+                  </View>
+                  <View style={styles.profileStatDivider} />
+                  <View style={styles.profileStatItem}>
+                    <Text style={styles.profileStatVal}>🏆 {studyStats.longest_streak}</Text>
+                    <Text style={styles.profileStatLbl}>Kỷ lục</Text>
+                  </View>
+                  <View style={styles.profileStatDivider} />
+                  <View style={styles.profileStatItem}>
+                    <Text style={styles.profileStatVal}>📚 {studyStats.total_sessions}</Text>
+                    <Text style={styles.profileStatLbl}>Phiên học</Text>
+                  </View>
+                  <View style={styles.profileStatDivider} />
+                  <View style={styles.profileStatItem}>
+                    <Text style={styles.profileStatVal}>
+                      ⏱ {Math.floor(studyStats.total_duration_seconds / 60)}p
+                    </Text>
+                    <Text style={styles.profileStatLbl}>Thời gian</Text>
+                  </View>
+                </View>
+              </View>
+            )}
 
             {/* Nút Chỉnh sửa hồ sơ */}
             <TouchableOpacity
@@ -651,5 +702,57 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  // Streak & Study Stats Box
+  statsCardBox: {
+    width: '100%',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    padding: 14,
+    marginVertical: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  statsCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  statsCardTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#EA580C',
+    letterSpacing: 0.5,
+  },
+  statsCardStatus: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  profileStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  profileStatItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  profileStatVal: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 2,
+  },
+  profileStatLbl: {
+    fontSize: 10,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  profileStatDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: '#CBD5E1',
   },
 });

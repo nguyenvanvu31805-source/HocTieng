@@ -1,6 +1,7 @@
 import {useEffect, useState} from "react";
 import api from "../services/api";
 import {useAuth} from "../context/useAuth";
+import {getStudyStats} from "../services/studySessionService";
 import {getErrorMessage} from "../utils/errors";
 
 const roleLabels = {
@@ -19,6 +20,7 @@ const formatDate = (value) =>
 export default function ProfilePage() {
   const {user, updateUser} = useAuth();
   const [profile, setProfile] = useState(user);
+  const [studyStats, setStudyStats] = useState(null);
   const [form, setForm] = useState({
     full_name: user?.full_name || "",
     avatar_url: user?.avatar_url || "",
@@ -43,6 +45,8 @@ export default function ProfilePage() {
         setState((current) => ({...current, error: getErrorMessage(error)})),
       )
       .finally(() => setState((current) => ({...current, loading: false})));
+
+    getStudyStats().then(setStudyStats).catch(() => {});
   }, []);
   const save = async (event) => {
     event.preventDefault();
@@ -105,6 +109,37 @@ export default function ProfilePage() {
               Ngày tạo<strong>{formatDate(profile?.created_at)}</strong>
             </span>
           </div>
+
+          {studyStats && (
+            <div className="profile-streak-box">
+              <div className="profile-streak-top">
+                <span className="profile-streak-badge">
+                  🔥 {studyStats.current_streak > 0 ? `${studyStats.current_streak} ngày liên tiếp` : "Bắt đầu chuỗi"}
+                </span>
+                <span className="profile-streak-today">
+                  {studyStats.today_studied ? "Đã học hôm nay 🎉" : "Chưa học hôm nay ⏳"}
+                </span>
+              </div>
+              <div className="profile-streak-grid">
+                <div>
+                  <strong>🔥 {studyStats.current_streak}</strong>
+                  <small>Chuỗi ngày</small>
+                </div>
+                <div>
+                  <strong>🏆 {studyStats.longest_streak}</strong>
+                  <small>Kỷ lục</small>
+                </div>
+                <div>
+                  <strong>📚 {studyStats.total_sessions}</strong>
+                  <small>Phiên học</small>
+                </div>
+                <div>
+                  <strong>⏱ {Math.floor(studyStats.total_duration_seconds / 60)}p</strong>
+                  <small>Thời gian</small>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         <form className="profile-form" onSubmit={save}>
           <div className="panel-kicker">CHỈNH SỬA THÔNG TIN</div>

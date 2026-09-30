@@ -14,6 +14,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { StudySet } from '@/types/studySet';
 import api from '@/services/api';
 import cardProgressService from '@/services/cardProgressService';
+import studySessionService from '@/services/studySessionService';
+import { StudyStats } from '@/types/studySession';
 import StudySetCard from '@/components/StudySetCard';
 
 export default function HomeScreen() {
@@ -22,6 +24,7 @@ export default function HomeScreen() {
 
   const [studySets, setStudySets] = useState<StudySet[]>([]);
   const [weakWordsCount, setWeakWordsCount] = useState<number>(0);
+  const [studyStats, setStudyStats] = useState<StudyStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -39,10 +42,24 @@ export default function HomeScreen() {
     }
   }, [isAuthenticated]);
 
+  const fetchStudyStats = useCallback(async () => {
+    if (!isAuthenticated) {
+      setStudyStats(null);
+      return;
+    }
+    try {
+      const stats = await studySessionService.getStudyStats();
+      setStudyStats(stats);
+    } catch {
+      setStudyStats(null);
+    }
+  }, [isAuthenticated]);
+
   useFocusEffect(
     useCallback(() => {
       fetchWeakCount();
-    }, [fetchWeakCount]),
+      fetchStudyStats();
+    }, [fetchWeakCount, fetchStudyStats]),
   );
 
   const fetchFeaturedSets = useCallback(async (isRefresh = false) => {
@@ -77,9 +94,19 @@ export default function HomeScreen() {
     setRefreshing(true);
     fetchFeaturedSets(true);
     fetchWeakCount();
+    fetchStudyStats();
   };
 
   const displayName = user?.full_name || user?.username || 'Bạn';
+
+  const formatStudyDuration = (seconds: number): string => {
+    if (!seconds || seconds <= 0) return '0p';
+    const mins = Math.floor(seconds / 60);
+    if (mins < 60) return `${mins}p`;
+    const hours = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    return remMins > 0 ? `${hours}h ${remMins}p` : `${hours}h`;
+  };
 
   // Header component cho FlatList
   const renderHeader = () => (
@@ -98,6 +125,49 @@ export default function HomeScreen() {
           </Text>
         </View>
       </View>
+
+      {/* Khối thống kê Chuỗi học tập (Learning Streak & Study Stats) */}
+      {isAuthenticated && studyStats && (
+        <View style={styles.streakStatsCard}>
+          <View style={styles.streakHeaderRow}>
+            <View style={styles.streakBadge}>
+              <Text style={styles.streakFlameIcon}>🔥</Text>
+              <Text style={styles.streakBadgeText}>
+                {studyStats.current_streak > 0
+                  ? `${studyStats.current_streak} NGÀY LIÊN TIẾP`
+                  : 'BẮT ĐẦU CHUỖI'}
+              </Text>
+            </View>
+            <Text style={styles.streakStatusBadge}>
+              {studyStats.today_studied ? 'Đã học hôm nay 🎉' : 'Chưa học hôm nay ⏳'}
+            </Text>
+          </View>
+
+          <View style={styles.statsSummaryGrid}>
+            <View style={styles.statsGridItem}>
+              <Text style={styles.statGridVal}>🔥 {studyStats.current_streak}</Text>
+              <Text style={styles.statGridLbl}>Chuỗi ngày</Text>
+            </View>
+            <View style={styles.statGridDivider} />
+            <View style={styles.statsGridItem}>
+              <Text style={styles.statGridVal}>🏆 {studyStats.longest_streak}</Text>
+              <Text style={styles.statGridLbl}>Kỷ lục</Text>
+            </View>
+            <View style={styles.statGridDivider} />
+            <View style={styles.statsGridItem}>
+              <Text style={styles.statGridVal}>📚 {studyStats.total_sessions}</Text>
+              <Text style={styles.statGridLbl}>Phiên học</Text>
+            </View>
+            <View style={styles.statGridDivider} />
+            <View style={styles.statsGridItem}>
+              <Text style={styles.statGridVal}>
+                ⏱ {formatStudyDuration(studyStats.total_duration_seconds)}
+              </Text>
+              <Text style={styles.statGridLbl}>Thời gian</Text>
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* Banner tạo động lực học tập */}
       <View style={styles.bannerCard}>
@@ -529,5 +599,79 @@ const styles = StyleSheet.create({
     color: '#C2410C',
     fontSize: 13,
     fontWeight: '600',
+  },
+  // Streak & Study Stats Card
+  streakStatsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  streakHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  streakBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF7ED',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#FFEDD5',
+  },
+  streakFlameIcon: {
+    fontSize: 16,
+    marginRight: 6,
+  },
+  streakBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#EA580C',
+    letterSpacing: 0.5,
+  },
+  streakStatusBadge: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  statsSummaryGrid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 6,
+  },
+  statsGridItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statGridVal: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 2,
+  },
+  statGridLbl: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  statGridDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#E2E8F0',
   },
 });

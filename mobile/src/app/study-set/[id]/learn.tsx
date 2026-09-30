@@ -20,6 +20,7 @@ import studySetService from '@/services/studySetService';
 import cardService from '@/services/cardService';
 import cardProgressService from '@/services/cardProgressService';
 import { playAudio } from '@/utils/audioPlayer';
+import useStudySession from '@/hooks/useStudySession';
 
 // Hàm xáo trộn mảng ngẫu nhiên theo thuật toán Fisher-Yates
 function shuffleArray<T>(array: T[]): T[] {
@@ -75,6 +76,12 @@ export default function LearnModeScreen() {
 
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // Tích hợp ghi nhận study session và streak
+  const { recordCardStudied, completeSession } = useStudySession({
+    setId: id,
+    mode: 'LEARN',
+  });
 
   // Tải dữ liệu Study Set và Cards
   const loadData = useCallback(async () => {
@@ -148,6 +155,8 @@ export default function LearnModeScreen() {
       setWrongCount((prev) => prev + 1);
     }
 
+    recordCardStudied();
+
     // Ghi nhận tiến độ học đúng 1 lần cho mỗi câu
     if (!hasRecorded) {
       setHasRecorded(true);
@@ -164,6 +173,7 @@ export default function LearnModeScreen() {
     setIsSubmitted(true);
     setIsCorrect(false);
     setWrongCount((prev) => prev + 1);
+    recordCardStudied();
 
     if (!hasRecorded) {
       setHasRecorded(true);
@@ -181,6 +191,9 @@ export default function LearnModeScreen() {
       setHasRecorded(false);
     } else {
       setIsCompleted(true);
+      const totalLen = shuffledCards.length;
+      const score = totalLen > 0 ? Math.round((correctCount / totalLen) * 100) : 0;
+      completeSession({ score, cardsStudied: totalLen });
     }
   };
 

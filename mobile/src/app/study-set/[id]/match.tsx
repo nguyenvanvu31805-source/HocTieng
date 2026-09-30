@@ -16,6 +16,7 @@ import { Card } from '@/types/card';
 import { StudySet } from '@/types/studySet';
 import api from '@/services/api';
 import cardProgressService from '@/services/cardProgressService';
+import useStudySession from '@/hooks/useStudySession';
 
 const { width } = Dimensions.get('window');
 const COLUMN_WIDTH = (width - 44) / 2;
@@ -66,6 +67,12 @@ export default function MatchScreen() {
 
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // Tích hợp study session và streak cho Match mode
+  const { recordCardStudied, completeSession } = useStudySession({
+    setId: id,
+    mode: 'MATCH',
+  });
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -163,10 +170,14 @@ export default function MatchScreen() {
         cardProgressService.reviewCard(termId, true).catch(() => {});
       }
 
+      recordCardStudied();
+
       // Kiểm tra nếu đã hoàn thành toàn bộ các cặp
       if (newMatched.length === totalPairs) {
         setIsPlaying(false);
         setIsFinished(true);
+        const calculatedScore = Math.max(10, 100 - wrongAttempts * 5);
+        completeSession({ score: calculatedScore, cardsStudied: totalPairs });
       }
     } else {
       // ❌ GHÉP SAI!

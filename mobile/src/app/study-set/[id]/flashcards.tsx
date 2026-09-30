@@ -18,6 +18,7 @@ import { StudySetProgress } from '@/types/cardProgress';
 import api from '@/services/api';
 import cardProgressService from '@/services/cardProgressService';
 import { playAudio } from '@/utils/audioPlayer';
+import useStudySession from '@/hooks/useStudySession';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width - 40;
@@ -42,6 +43,12 @@ export default function FlashcardsScreen() {
 
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // Tích hợp ghi nhận study session và streak
+  const { recordCardStudied, completeSession } = useStudySession({
+    setId: id,
+    mode: 'FLASHCARDS',
+  });
 
   // Giá trị animation xoay 3D (0 -> 180 độ)
   const flipAnim = useRef(new Animated.Value(0)).current;
@@ -190,6 +197,7 @@ export default function FlashcardsScreen() {
     const currentCard = cards[currentIndex];
     if (currentCard) {
       recordCardReview(currentCard.card_id);
+      recordCardStudied();
     }
 
     if (currentIndex < cards.length - 1) {
@@ -197,6 +205,7 @@ export default function FlashcardsScreen() {
       setCurrentIndex((prev) => prev + 1);
     } else {
       setIsCompleted(true);
+      completeSession({ cardsStudied: cards.length });
     }
   };
 

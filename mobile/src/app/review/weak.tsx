@@ -18,6 +18,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { WeakCard } from '@/types/cardProgress';
 import cardProgressService from '@/services/cardProgressService';
 import { playAudio } from '@/utils/audioPlayer';
+import useStudySession from '@/hooks/useStudySession';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width - 40;
@@ -60,6 +61,12 @@ export default function WeakReviewScreen() {
 
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // Tích hợp study session và streak cho Weak Words Review
+  const { recordCardStudied, completeSession } = useStudySession({
+    setId: null,
+    mode: 'WEAK_REVIEW',
+  });
 
   const loadWeakCards = useCallback(async () => {
     setLoading(true);
@@ -140,6 +147,9 @@ export default function WeakReviewScreen() {
     // Gọi API cập nhật tiến độ
     cardProgressService.reviewCard(currentCard.card_id, remembered).catch(() => {});
 
+    // Ghi nhận card đã học
+    recordCardStudied();
+
     // Chuyển sang thẻ tiếp theo
     if (currentIndex < cards.length - 1) {
       if (isFlipped) {
@@ -149,6 +159,7 @@ export default function WeakReviewScreen() {
       setCurrentIndex((prev) => prev + 1);
     } else {
       setIsCompleted(true);
+      completeSession({ cardsStudied: cards.length });
     }
   };
 
@@ -168,6 +179,8 @@ export default function WeakReviewScreen() {
       setWrongCount((prev) => prev + 1);
     }
 
+    recordCardStudied();
+
     // Gửi tiến độ lên backend
     cardProgressService.reviewCard(currentCard.card_id, correct).catch(() => {});
   };
@@ -180,6 +193,9 @@ export default function WeakReviewScreen() {
       setIsAnswerCorrect(null);
     } else {
       setIsCompleted(true);
+      const totalLen = cards.length;
+      const score = totalLen > 0 ? Math.round((correctCount / totalLen) * 100) : 0;
+      completeSession({ score, cardsStudied: totalLen });
     }
   };
 

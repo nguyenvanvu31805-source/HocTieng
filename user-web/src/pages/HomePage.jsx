@@ -1,15 +1,25 @@
 import {useEffect, useState} from "react";
 import {useNavigate, useSearchParams} from "react-router-dom";
 import api from "../services/api";
+import {useAuth} from "../context/useAuth";
+import {getStudyStats} from "../services/studySessionService";
 import {getErrorMessage} from "../utils/errors";
 import StudySetCard from "../components/StudySetCard";
 
 export default function HomePage({explore = false}) {
   const navigate = useNavigate();
+  const {user} = useAuth();
   const [searchParams] = useSearchParams();
   const [query, setQuery] = useState(searchParams.get("q") || "");
   const [studySets, setStudySets] = useState([]);
+  const [studyStats, setStudyStats] = useState(null);
   const [state, setState] = useState({loading: true, error: ""});
+
+  useEffect(() => {
+    if (user) {
+      getStudyStats().then(setStudyStats).catch(() => {});
+    }
+  }, [user]);
 
   useEffect(() => {
     const search = searchParams.get("q") || "";
@@ -80,6 +90,53 @@ export default function HomePage({explore = false}) {
           <div className="art-caption">01 / LUYỆN TẬP HẰNG NGÀY</div>
         </div>
       </section>
+
+      {/* Thống kê chuỗi học tập (Streak & Study Stats) */}
+      {user && studyStats && (
+        <section className="streak-banner-card">
+          <div className="streak-banner-top">
+            <div className="streak-badge-box">
+              <span className="streak-flame">🔥</span>
+              <span className="streak-badge-title">
+                {studyStats.current_streak > 0
+                  ? `${studyStats.current_streak} NGÀY LIÊN TIẾP`
+                  : "BẮT ĐẦU CHUỖI MỚI"}
+              </span>
+            </div>
+            <span className="streak-status-pill">
+              {studyStats.today_studied
+                ? "Đã học hôm nay 🎉"
+                : "Chưa học hôm nay — Học ngay để duy trì chuỗi! ⏳"}
+            </span>
+          </div>
+
+          <div className="streak-grid">
+            <div className="streak-grid-item">
+              <span className="streak-val">🔥 {studyStats.current_streak}</span>
+              <span className="streak-lbl">Chuỗi ngày</span>
+            </div>
+            <div className="streak-grid-item">
+              <span className="streak-val">🏆 {studyStats.longest_streak}</span>
+              <span className="streak-lbl">Kỷ lục</span>
+            </div>
+            <div className="streak-grid-item">
+              <span className="streak-val">📚 {studyStats.total_sessions}</span>
+              <span className="streak-lbl">Phiên học</span>
+            </div>
+            <div className="streak-grid-item">
+              <span className="streak-val">📅 {studyStats.total_study_days}</span>
+              <span className="streak-lbl">Ngày học</span>
+            </div>
+            <div className="streak-grid-item">
+              <span className="streak-val">
+                ⏱ {Math.floor(studyStats.total_duration_seconds / 60)}p
+              </span>
+              <span className="streak-lbl">Tổng thời gian</span>
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="library-section">
         <div className="section-heading">
           <div>
