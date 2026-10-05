@@ -41,6 +41,7 @@ export interface ClassMember {
   username: string;
   full_name: string;
   avatar_url: string | null;
+  email?: string;
 }
 
 export interface JoinClassResponse {

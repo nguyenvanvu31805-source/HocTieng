@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -21,6 +21,7 @@ import {
 } from '@/types/testResult';
 import api from '@/services/api';
 import testResultService from '@/services/testResultService';
+import assignmentService from '@/services/assignmentService';
 import { playAudio } from '@/utils/audioPlayer';
 import useStudySession from '@/hooks/useStudySession';
 
@@ -79,7 +80,13 @@ function buildQuizQuestions(cards: Card[], allCards: Card[] = cards): QuizQuesti
 
 export default function TestScreen() {
   const router = useRouter();
-  const { id, retryResultId } = useLocalSearchParams<{ id: string; retryResultId?: string }>();
+  const { id, retryResultId, assignmentId, classId, reviewResultId } = useLocalSearchParams<{
+    id: string;
+    retryResultId?: string;
+    assignmentId?: string;
+    classId?: string;
+    reviewResultId?: string;
+  }>();
   const { isAuthenticated } = useAuth();
 
   const [studySet, setStudySet] = useState<StudySet | null>(null);
@@ -95,6 +102,8 @@ export default function TestScreen() {
   const [quizSummary, setQuizSummary] = useState<QuizSummary | null>(null);
   const [isRetrySession, setIsRetrySession] = useState(false);
   const [showDetails, setShowDetails] = useState(true);
+  const [assignmentSubmitted, setAssignmentSubmitted] = useState(false);
+  const assignmentSubmittedRef = useRef(false);
 
   // Tích hợp study session và streak cho Test mode
   const { recordCardStudied, completeSession } = useStudySession({
@@ -131,6 +140,44 @@ export default function TestScreen() {
         setQuestions([]);
         setIsRetrySession(false);
         return;
+      }
+
+      // Nếu có reviewResultId, tải chi tiết kết quả đã nộp để xem lại
+      if (reviewResultId) {
+        try {
+          const revResult = await testResultService.getTestResult(reviewResultId);
+          if (revResult && revResult.details && revResult.details.length > 0) {
+            const resultDetails = revResult.details.map((d) => ({
+              questionNumber: d.question_order,
+              card_id: d.card_id,
+              term: d.term,
+              pronunciation: d.pronunciation,
+              example: d.example,
+              audio_url: d.audio_url,
+              userAnswer: d.user_answer || '',
+              correctAnswer: d.correct_answer,
+              isCorrect: Boolean(d.is_correct),
+            }));
+
+            const scoreVal =
+              typeof revResult.score === 'string'
+                ? parseFloat(revResult.score)
+                : revResult.score;
+
+            setQuizSummary({
+              totalQuestions: revResult.total_questions,
+              correctAnswers: revResult.correct_answers,
+              wrongAnswers: revResult.total_questions - revResult.correct_answers,
+              score: scoreVal,
+              savedResult: revResult,
+              details: resultDetails,
+            });
+            setCards(fullCards);
+            return;
+          }
+        } catch (revErr) {
+          console.warn('Lỗi khi tải kết quả xem lại bài kiểm tra:', revErr);
+        }
       }
 
       // Nếu có retryResultId, thử lấy danh sách câu hỏi đã trả lời sai ở lần thi trước
@@ -175,7 +222,7 @@ export default function TestScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id, retryResultId]);
+  }, [id, retryResultId, reviewResultId]);
 
   useEffect(() => {
     fetchTestData();
@@ -256,6 +303,19 @@ export default function TestScreen() {
         });
 
         completeSession({ score: scoreVal, cardsStudied: savedResult.total_questions });
+
+        // Tự động nộp bài tập nếu đang làm bài trong khuôn khổ Assignment
+        if (assignmentId && savedResult?.result_id && !assignmentSubmittedRef.current) {
+          assignmentSubmittedRef.current = true;
+          try {
+            await assignmentService.submitAssignment(assignmentId, {
+              result_id: savedResult.result_id,
+            });
+            setAssignmentSubmitted(true);
+          } catch (subErr: any) {
+            console.warn('Lỗi khi nộp bài tập:', subErr);
+          }
+        }
       } else {
         // Fallback offline / local grading
         const fallbackDetails = questions.map((q, idx) => {
@@ -491,6 +551,21 @@ export default function TestScreen() {
               Bạn đã hoàn thành bài kiểm tra cho bộ "{studySet?.title}".
             </Text>
 
+            {/* Banner nộp bài tập nếu làm trong khuôn khổ Assignment */}
+            {(assignmentSubmitted || reviewResultId) && (
+              <View style={styles.assignmentSuccessBanner}>
+                <Text style={styles.assignmentSuccessIcon}>🎉</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.assignmentSuccessTitle}>
+                    {reviewResultId ? 'Kết quả bài tập đã nộp' : 'Đã nộp bài tập thành công!'}
+                  </Text>
+                  <Text style={styles.assignmentSuccessSub}>
+                    Điểm số: {quizSummary.score}% – Đã được cập nhật vào bảng điểm lớp học.
+                  </Text>
+                </View>
+              </View>
+            )}
+
             {/* Bảng điểm thống kê */}
             <View style={styles.resultStatsRow}>
               <View style={styles.resultStatBox}>
@@ -520,6 +595,22 @@ export default function TestScreen() {
 
             {/* Nút hành động */}
             <View style={styles.resultActionButtons}>
+              {classId && (
+                <TouchableOpacity
+                  style={styles.backToClassBtn}
+                  onPress={() => router.replace(`/class/${classId}` as any)}
+                  activeOpacity={0.8}>
+                  <Text style={styles.backToClassBtnText}>🏫 Quay lại lớp học</Text>
+                </TouchableOpacity>
+              )}
+              {assignmentId && (
+                <TouchableOpacity
+                  style={styles.backToAssignmentBtn}
+                  onPress={() => router.replace(`/assignment/${assignmentId}` as any)}
+                  activeOpacity={0.8}>
+                  <Text style={styles.backToAssignmentBtnText}>📋 Xem chi tiết bài tập</Text>
+                </TouchableOpacity>
+              )}
               {quizSummary.wrongAnswers > 0 && (
                 <TouchableOpacity
                   style={styles.retryIncorrectBtn}
@@ -1453,5 +1544,57 @@ const styles = StyleSheet.create({
   },
   textWrong: {
     color: '#DC2626',
+  },
+  assignmentSuccessBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1.5,
+    borderColor: '#A7F3D0',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    width: '100%',
+  },
+  assignmentSuccessIcon: {
+    fontSize: 24,
+    marginRight: 10,
+  },
+  assignmentSuccessTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#065F46',
+    marginBottom: 2,
+  },
+  assignmentSuccessSub: {
+    fontSize: 12,
+    color: '#047857',
+    fontWeight: '600',
+  },
+  backToClassBtn: {
+    backgroundColor: '#4255FF',
+    paddingVertical: 13,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  backToClassBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  backToAssignmentBtn: {
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1.5,
+    borderColor: '#C7D2FE',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  backToAssignmentBtnText: {
+    color: '#4255FF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

@@ -17,6 +17,7 @@ import { StudySet } from '@/types/studySet';
 import { StudySetProgress } from '@/types/cardProgress';
 import api from '@/services/api';
 import cardProgressService from '@/services/cardProgressService';
+import assignmentService from '@/services/assignmentService';
 import { playAudio } from '@/utils/audioPlayer';
 import useStudySession from '@/hooks/useStudySession';
 
@@ -25,7 +26,12 @@ const CARD_WIDTH = width - 40;
 
 export default function FlashcardsScreen() {
   const router = useRouter();
-  const { id, filter: initialFilter } = useLocalSearchParams<{ id: string; filter?: string }>();
+  const { id, filter: initialFilter, assignmentId, classId } = useLocalSearchParams<{
+    id: string;
+    filter?: string;
+    assignmentId?: string;
+    classId?: string;
+  }>();
   const [currentFilter, setCurrentFilter] = useState<string>(initialFilter || 'all');
 
   const [studySet, setStudySet] = useState<StudySet | null>(null);
@@ -33,6 +39,8 @@ export default function FlashcardsScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [assignmentSubmitted, setAssignmentSubmitted] = useState(false);
+  const assignmentSubmittedRef = useRef(false);
 
   // Tiến độ học (Card Progress) từ backend
   const [studyProgress, setStudyProgress] = useState<StudySetProgress | null>(null);
@@ -191,7 +199,7 @@ export default function FlashcardsScreen() {
   };
 
   // Sang thẻ tiếp theo: ghi nhận tiến độ card hiện tại và chuyển tiếp
-  const handleNext = () => {
+  const handleNext = async () => {
     if (cards.length === 0) return;
 
     const currentCard = cards[currentIndex];
@@ -205,7 +213,19 @@ export default function FlashcardsScreen() {
       setCurrentIndex((prev) => prev + 1);
     } else {
       setIsCompleted(true);
-      completeSession({ cardsStudied: cards.length });
+      const sessionId = await completeSession({ cardsStudied: cards.length });
+
+      if (assignmentId && !assignmentSubmittedRef.current) {
+        assignmentSubmittedRef.current = true;
+        try {
+          await assignmentService.submitAssignment(assignmentId, {
+            session_id: sessionId || undefined,
+          });
+          setAssignmentSubmitted(true);
+        } catch (subErr) {
+          console.warn('Lỗi khi nộp bài tập:', subErr);
+        }
+      }
     }
   };
 
@@ -409,6 +429,19 @@ export default function FlashcardsScreen() {
               Bạn đã ôn tập xong tất cả thẻ từ vựng trong bộ này.
             </Text>
 
+            {/* Banner nộp bài tập nếu làm trong khuôn khổ Assignment */}
+            {(assignmentSubmitted || assignmentId) && (
+              <View style={styles.assignmentSuccessBanner}>
+                <Text style={styles.assignmentSuccessIcon}>🎉</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.assignmentSuccessTitle}>Đã hoàn thành bài tập Flashcards!</Text>
+                  <Text style={styles.assignmentSuccessSub}>
+                    Bạn đã ôn tập xong {totalCards} thẻ – Kết quả đã được ghi nhận vào lớp học.
+                  </Text>
+                </View>
+              </View>
+            )}
+
             {/* Thống kê tiến độ thực tế từ Backend */}
             <View style={styles.statsBox}>
               <View style={styles.statItem}>
@@ -428,6 +461,24 @@ export default function FlashcardsScreen() {
                 <Text style={styles.statLabel}>Phiên học này</Text>
               </View>
             </View>
+
+            {classId && (
+              <TouchableOpacity
+                style={styles.backToClassBtn}
+                onPress={() => router.replace(`/class/${classId}` as any)}
+                activeOpacity={0.8}>
+                <Text style={styles.backToClassBtnText}>🏫 Quay lại lớp học</Text>
+              </TouchableOpacity>
+            )}
+
+            {assignmentId && (
+              <TouchableOpacity
+                style={styles.backToAssignmentBtn}
+                onPress={() => router.replace(`/assignment/${assignmentId}` as any)}
+                activeOpacity={0.8}>
+                <Text style={styles.backToAssignmentBtnText}>📋 Xem chi tiết bài tập</Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={styles.restartButton}
@@ -1211,6 +1262,60 @@ const styles = StyleSheet.create({
   },
   finishBackBtnText: {
     color: '#2E3856',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  assignmentSuccessBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1.5,
+    borderColor: '#A7F3D0',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    width: '100%',
+  },
+  assignmentSuccessIcon: {
+    fontSize: 24,
+    marginRight: 10,
+  },
+  assignmentSuccessTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#065F46',
+    marginBottom: 2,
+  },
+  assignmentSuccessSub: {
+    fontSize: 12,
+    color: '#047857',
+    fontWeight: '600',
+  },
+  backToClassBtn: {
+    width: '100%',
+    backgroundColor: '#4255FF',
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  backToClassBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  backToAssignmentBtn: {
+    width: '100%',
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1.5,
+    borderColor: '#C7D2FE',
+    paddingVertical: 13,
+    borderRadius: 14,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  backToAssignmentBtnText: {
+    color: '#4255FF',
     fontSize: 15,
     fontWeight: '700',
   },

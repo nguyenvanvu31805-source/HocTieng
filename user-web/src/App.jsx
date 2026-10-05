@@ -11,10 +11,13 @@ import LearnPage from "./pages/LearnPage";
 import TestPage from "./pages/TestPage";
 import MatchPage from "./pages/MatchPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
+import LearningHistoryPage from "./pages/LearningHistoryPage";
+import LearningSessionDetailPage from "./pages/LearningSessionDetailPage";
 import LibraryPage from "./pages/LibraryPage";
 import ProfilePage from "./pages/ProfilePage";
 import ClassesPage from "./pages/ClassesPage";
 import ClassDetailPage from "./pages/ClassDetailPage";
+import GradebookPage from "./pages/GradebookPage";
 import WeakWordsPage from "./pages/WeakWordsPage";
 import WeakReviewPage from "./pages/WeakReviewPage";
 import "./App.css";
@@ -36,17 +39,20 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route element={<ProtectedRoute />}>
+              <Route path="/my-learning" element={<LearningHistoryPage />} />
               <Route
-                path="/my-learning"
-                element={
-                  <PlaceholderPage title="Việc học của tôi" code="API-05" />
-                }
+                path="/my-learning/:sessionId"
+                element={<LearningSessionDetailPage />}
               />
               <Route path="/study-sets/:setId/learn" element={<LearnPage />} />
               <Route path="/study-sets/:setId/test" element={<TestPage />} />
               <Route path="/library" element={<LibraryPage />} />
               <Route path="/classes" element={<ClassesPage />} />
               <Route path="/classes/:classId" element={<ClassDetailPage />} />
+              <Route
+                path="/classes/:classId/assignments/:assignmentId/gradebook"
+                element={<GradebookPage />}
+              />
               <Route path="/weak-words" element={<WeakWordsPage />} />
               <Route path="/review/weak" element={<WeakReviewPage />} />
               <Route

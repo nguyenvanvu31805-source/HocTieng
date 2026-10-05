@@ -16,6 +16,7 @@ import { Card } from '@/types/card';
 import { StudySet } from '@/types/studySet';
 import api from '@/services/api';
 import cardProgressService from '@/services/cardProgressService';
+import assignmentService from '@/services/assignmentService';
 import useStudySession from '@/hooks/useStudySession';
 
 const { width } = Dimensions.get('window');
@@ -41,13 +42,19 @@ function formatTime(seconds: number): string {
 
 export default function MatchScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, assignmentId, classId } = useLocalSearchParams<{
+    id: string;
+    assignmentId?: string;
+    classId?: string;
+  }>();
   const { isAuthenticated } = useAuth();
 
   const [studySet, setStudySet] = useState<StudySet | null>(null);
   const [sourceCards, setSourceCards] = useState<Card[]>([]);
   const [termCards, setTermCards] = useState<Card[]>([]);
   const [definitionCards, setDefinitionCards] = useState<Card[]>([]);
+  const [assignmentSubmitted, setAssignmentSubmitted] = useState(false);
+  const assignmentSubmittedRef = useRef(false);
 
   // Thẻ đang được chọn
   const [selectedTermId, setSelectedTermId] = useState<number | null>(null);
@@ -156,7 +163,7 @@ export default function MatchScreen() {
   const totalPairs = sourceCards.length;
 
   // Xử lý kiểm tra khi cả 2 bên (Term & Definition) đều đã được chọn
-  const verifyPair = (termId: number, defId: number) => {
+  const verifyPair = async (termId: number, defId: number) => {
     if (termId === defId) {
       // ✅ GHÉP ĐÚNG!
       const newMatched = [...matchedCardIds, termId];
@@ -177,7 +184,19 @@ export default function MatchScreen() {
         setIsPlaying(false);
         setIsFinished(true);
         const calculatedScore = Math.max(10, 100 - wrongAttempts * 5);
-        completeSession({ score: calculatedScore, cardsStudied: totalPairs });
+        const sessionId = await completeSession({ score: calculatedScore, cardsStudied: totalPairs });
+
+        if (assignmentId && !assignmentSubmittedRef.current) {
+          assignmentSubmittedRef.current = true;
+          try {
+            await assignmentService.submitAssignment(assignmentId, {
+              session_id: sessionId || undefined,
+            });
+            setAssignmentSubmitted(true);
+          } catch (subErr) {
+            console.warn('Lỗi khi nộp bài tập:', subErr);
+          }
+        }
       }
     } else {
       // ❌ GHÉP SAI!
@@ -349,6 +368,19 @@ export default function MatchScreen() {
               Bạn đã ghép đúng tất cả các cặp từ trong bộ "{studySet?.title}".
             </Text>
 
+            {/* Banner nộp bài tập nếu làm trong khuôn khổ Assignment */}
+            {(assignmentSubmitted || assignmentId) && (
+              <View style={styles.assignmentSuccessBanner}>
+                <Text style={styles.assignmentSuccessIcon}>🎉</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.assignmentSuccessTitle}>Đã hoàn thành bài tập Ghép thẻ!</Text>
+                  <Text style={styles.assignmentSuccessSub}>
+                    Thời gian: {formatTime(elapsedSeconds)} (Độ chính xác: {accuracy}%) – Kết quả đã được ghi nhận vào lớp học.
+                  </Text>
+                </View>
+              </View>
+            )}
+
             {/* Bảng kết quả thành tích */}
             <View style={styles.finishStatsGrid}>
               <View style={styles.statBox}>
@@ -370,6 +402,24 @@ export default function MatchScreen() {
                 <Text style={styles.statLabel}>Độ chính xác</Text>
               </View>
             </View>
+
+            {classId && (
+              <TouchableOpacity
+                style={styles.backToClassBtn}
+                onPress={() => router.replace(`/class/${classId}` as any)}
+                activeOpacity={0.8}>
+                <Text style={styles.backToClassBtnText}>🏫 Quay lại lớp học</Text>
+              </TouchableOpacity>
+            )}
+
+            {assignmentId && (
+              <TouchableOpacity
+                style={styles.backToAssignmentBtn}
+                onPress={() => router.replace(`/assignment/${assignmentId}` as any)}
+                activeOpacity={0.8}>
+                <Text style={styles.backToAssignmentBtnText}>📋 Xem chi tiết bài tập</Text>
+              </TouchableOpacity>
+            )}
 
             {/* Nút hành động */}
             <TouchableOpacity
@@ -857,6 +907,60 @@ const styles = StyleSheet.create({
   },
   backToSetBtnText: {
     color: '#2E3856',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  assignmentSuccessBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1.5,
+    borderColor: '#A7F3D0',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    width: '100%',
+  },
+  assignmentSuccessIcon: {
+    fontSize: 24,
+    marginRight: 10,
+  },
+  assignmentSuccessTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#065F46',
+    marginBottom: 2,
+  },
+  assignmentSuccessSub: {
+    fontSize: 12,
+    color: '#047857',
+    fontWeight: '600',
+  },
+  backToClassBtn: {
+    width: '100%',
+    backgroundColor: '#4255FF',
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  backToClassBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  backToAssignmentBtn: {
+    width: '100%',
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1.5,
+    borderColor: '#C7D2FE',
+    paddingVertical: 13,
+    borderRadius: 14,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  backToAssignmentBtnText: {
+    color: '#4255FF',
     fontSize: 15,
     fontWeight: '700',
   },

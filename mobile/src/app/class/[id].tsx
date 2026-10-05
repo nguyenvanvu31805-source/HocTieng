@@ -16,7 +16,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { ClassDetail, ClassMember } from '@/types/class';
-import { Assignment, AssignmentMode } from '@/types/assignment';
+import {
+  Assignment,
+  AssignmentMode,
+  AssignmentSubmission,
+  AssignmentSubmissionStatus,
+} from '@/types/assignment';
 import { StudySet } from '@/types/studySet';
 import classService from '@/services/classService';
 import assignmentService from '@/services/assignmentService';
@@ -56,7 +61,49 @@ const MODE_MAP: Record<
     color: '#F59E0B',
     bg: '#FEF3C7',
     actionText: 'Học ngay →',
+    routeSuffix: 'learn',
+  },
+  ALL: {
+    label: 'Tất cả chế độ',
+    icon: '🌟',
+    color: '#8B5CF6',
+    bg: '#F5F3FF',
+    actionText: 'Học ngay →',
     routeSuffix: 'flashcards',
+  },
+};
+
+const STATUS_BADGE_CONFIG: Record<
+  AssignmentSubmissionStatus,
+  { label: string; icon: string; color: string; bg: string; border: string }
+> = {
+  NOT_STARTED: {
+    label: 'Chưa làm',
+    icon: '⚪',
+    color: '#64748B',
+    bg: '#F1F5F9',
+    border: '#CBD5E1',
+  },
+  IN_PROGRESS: {
+    label: 'Đang làm',
+    icon: '🟡',
+    color: '#D97706',
+    bg: '#FEF3C7',
+    border: '#FDE68A',
+  },
+  COMPLETED: {
+    label: 'Đã hoàn thành',
+    icon: '🟢',
+    color: '#15803D',
+    bg: '#DCFCE7',
+    border: '#86EFAC',
+  },
+  OVERDUE: {
+    label: 'Quá hạn',
+    icon: '🔴',
+    color: '#DC2626',
+    bg: '#FEE2E2',
+    border: '#FECACA',
   },
 };
 
@@ -80,6 +127,8 @@ export default function ClassDetailScreen() {
   const [classDetail, setClassDetail] = useState<ClassDetail | null>(null);
   const [members, setMembers] = useState<ClassMember[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [submissions, setSubmissions] = useState<Record<number, AssignmentSubmission>>({});
+  const [startingId, setStartingId] = useState<number | null>(null);
 
   const [activeTab, setActiveTab] = useState<TabType>('assignments');
   const [loading, setLoading] = useState(true);
@@ -99,6 +148,14 @@ export default function ClassDetailScreen() {
   const [assignSubmitting, setAssignSubmitting] = useState(false);
   const [assignError, setAssignError] = useState('');
 
+  // Modal Sửa thông tin lớp học (dành cho Giáo viên chủ lớp)
+  const [editClassModalVisible, setEditClassModalVisible] = useState(false);
+  const [editClassName, setEditClassName] = useState('');
+  const [editClassDescription, setEditClassDescription] = useState('');
+  const [editClassSubmitting, setEditClassSubmitting] = useState(false);
+  const [editClassError, setEditClassError] = useState('');
+  const [removingMemberId, setRemovingMemberId] = useState<number | null>(null);
+
   // Tải chi tiết lớp, thành viên và bài tập
   const fetchClassData = useCallback(
     async (isRefresh = false) => {
@@ -116,6 +173,31 @@ export default function ClassDetailScreen() {
         setClassDetail(detailData);
         setMembers(membersData);
         setAssignments(assignmentsData);
+
+        const isTeacherUser =
+          detailData?.is_teacher ||
+          user?.role === 'TEACHER' ||
+          user?.role === 'ADMIN' ||
+          detailData?.member_role === 'TEACHER';
+
+        if (!isTeacherUser && assignmentsData.length > 0) {
+          try {
+            const subResults = await Promise.all(
+              assignmentsData.map((a) =>
+                assignmentService.getMySubmission(a.assignment_id).catch(() => null),
+              ),
+            );
+            const subMap: Record<number, AssignmentSubmission> = {};
+            assignmentsData.forEach((a, idx) => {
+              if (subResults[idx]) {
+                subMap[a.assignment_id] = subResults[idx];
+              }
+            });
+            setSubmissions(subMap);
+          } catch {
+            // ignore
+          }
+        }
       } catch (error: any) {
         const msg =
           error?.status === 404
@@ -131,7 +213,7 @@ export default function ClassDetailScreen() {
         setRefreshing(false);
       }
     },
-    [id],
+    [id, user?.role],
   );
 
   useEffect(() => {
@@ -185,6 +267,95 @@ export default function ClassDetailScreen() {
     user?.role === 'TEACHER' ||
     user?.role === 'ADMIN' ||
     classDetail?.member_role === 'TEACHER';
+
+  const isTeacherOwner =
+    Boolean(classDetail?.is_teacher) ||
+    (Boolean(classDetail?.teacher_id && user?.user_id) &&
+      Number(classDetail?.teacher_id) === Number(user?.user_id)) ||
+    user?.role === 'ADMIN';
+
+  // Mở modal sửa thông tin lớp
+  const handleOpenEditClassModal = () => {
+    if (!classDetail) return;
+    setEditClassName(classDetail.name);
+    setEditClassDescription(classDetail.description || '');
+    setEditClassError('');
+    setEditClassModalVisible(true);
+  };
+
+  // Gửi cập nhật thông tin lớp
+  const handleEditClassSubmit = async () => {
+    if (!id) return;
+    const trimmedName = editClassName.trim();
+    if (!trimmedName) {
+      setEditClassError('Vui lòng nhập tên lớp học.');
+      return;
+    }
+
+    setEditClassSubmitting(true);
+    setEditClassError('');
+
+    try {
+      const updated = await classService.updateClass(id, {
+        name: trimmedName,
+        description: editClassDescription.trim() || null,
+      });
+
+      setClassDetail((prev) =>
+        prev
+          ? {
+              ...prev,
+              name: updated.name,
+              description: updated.description,
+            }
+          : prev,
+      );
+      setEditClassModalVisible(false);
+      Alert.alert('Thành công', 'Cập nhật thông tin lớp học thành công!');
+    } catch (err: any) {
+      const msg = err?.data?.message || err?.message || 'Không thể cập nhật lớp học.';
+      setEditClassError(msg);
+    } finally {
+      setEditClassSubmitting(false);
+    }
+  };
+
+  // Xóa học sinh khỏi lớp (dành cho Giáo viên chủ lớp)
+  const handleRemoveMember = (member: ClassMember) => {
+    if (!id) return;
+    const memberName = member.full_name || member.username || `học viên #${member.user_id}`;
+    Alert.alert(
+      'Xác nhận xóa',
+      'Bạn có chắc muốn xóa học viên này khỏi lớp?',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa',
+          style: 'destructive',
+          onPress: async () => {
+            setRemovingMemberId(member.user_id);
+            try {
+              await classService.removeMember(id, member.user_id);
+              setMembers((prev) => prev.filter((m) => m.user_id !== member.user_id));
+              setClassDetail((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      member_count: Math.max(0, (prev.member_count || 1) - 1),
+                    }
+                  : prev,
+              );
+              Alert.alert('Thành công', `Đã xóa ${memberName} khỏi lớp.`);
+            } catch (err: any) {
+              Alert.alert('Lỗi', err?.message || 'Không thể xóa học viên khỏi lớp.');
+            } finally {
+              setRemovingMemberId(null);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const teacherName =
     classDetail?.teacher_full_name ||
@@ -302,6 +473,15 @@ export default function ClassDetailScreen() {
               </View>
             )}
           </View>
+
+          {isTeacherOwner && (
+            <TouchableOpacity
+              style={styles.editClassBtn}
+              onPress={handleOpenEditClassModal}
+              activeOpacity={0.8}>
+              <Text style={styles.editClassBtnText}>✏️ Chỉnh sửa lớp</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Khối Mã tham gia (Join Code) */}
@@ -411,10 +591,51 @@ export default function ClassDetailScreen() {
     );
   };
 
+  const handleStartAssignment = async (item: Assignment) => {
+    if (startingId) return;
+    const modeInfo = MODE_MAP[item.mode] || MODE_MAP.TEST;
+    setStartingId(item.assignment_id);
+    try {
+      const res = await assignmentService.startAssignment(item.assignment_id);
+      setSubmissions((prev) => ({ ...prev, [item.assignment_id]: res }));
+      router.push({
+        pathname: `/study-set/[id]/${modeInfo.routeSuffix}` as any,
+        params: {
+          id: String(item.set_id),
+          assignmentId: String(item.assignment_id),
+          classId: String(id),
+        },
+      });
+    } catch (err: any) {
+      Alert.alert('Lỗi', err?.message || 'Không thể bắt đầu bài tập.');
+    } finally {
+      setStartingId(null);
+    }
+  };
+
+  const handleContinueAssignment = (item: Assignment) => {
+    const modeInfo = MODE_MAP[item.mode] || MODE_MAP.TEST;
+    router.push({
+      pathname: `/study-set/[id]/${modeInfo.routeSuffix}` as any,
+      params: {
+        id: String(item.set_id),
+        assignmentId: String(item.assignment_id),
+        classId: String(id),
+      },
+    });
+  };
+
   // Render thẻ Bài tập
   const renderAssignmentItem = ({ item }: { item: Assignment }) => {
     const modeInfo = MODE_MAP[item.mode] || MODE_MAP.TEST;
     const deadlineInfo = formatDeadline(item.deadline);
+
+    const sub = submissions[item.assignment_id];
+    const isPastDeadline = !!deadlineInfo?.isPast;
+    const studentStatus: AssignmentSubmissionStatus =
+      sub?.status || (isPastDeadline ? 'OVERDUE' : 'NOT_STARTED');
+    const statusBadge = STATUS_BADGE_CONFIG[studentStatus] || STATUS_BADGE_CONFIG.NOT_STARTED;
+    const isStarting = startingId === item.assignment_id;
 
     return (
       <TouchableOpacity
@@ -432,6 +653,23 @@ export default function ClassDetailScreen() {
               {modeInfo.label}
             </Text>
           </View>
+
+          {/* Huy hiệu trạng thái dành cho học sinh */}
+          {!isTeacher && (
+            <View
+              style={[
+                styles.studentStatusBadge,
+                { backgroundColor: statusBadge.bg, borderColor: statusBadge.border },
+              ]}>
+              <Text style={styles.studentStatusBadgeIcon}>{statusBadge.icon}</Text>
+              <Text style={[styles.studentStatusBadgeText, { color: statusBadge.color }]}>
+                {statusBadge.label}
+                {studentStatus === 'COMPLETED' && sub?.score !== null && sub?.score !== undefined
+                  ? ` (${sub.score}%)`
+                  : ''}
+              </Text>
+            </View>
+          )}
 
           {deadlineInfo ? (
             <View
@@ -477,12 +715,84 @@ export default function ClassDetailScreen() {
         </View>
 
         <View style={styles.assignmentCardFooter}>
-          <TouchableOpacity
-            style={[styles.quickStartBtn, { backgroundColor: modeInfo.color }]}
-            onPress={() => router.push(`/assignment/${item.assignment_id}` as any)}
-            activeOpacity={0.8}>
-            <Text style={styles.quickStartBtnText}>{modeInfo.actionText}</Text>
-          </TouchableOpacity>
+          {isTeacher ? (
+            <View style={styles.teacherActionRow}>
+              <TouchableOpacity
+                style={[styles.quickStartBtn, styles.teacherDetailBtn]}
+                onPress={() => router.push(`/assignment/${item.assignment_id}` as any)}
+                activeOpacity={0.8}>
+                <Text style={styles.teacherDetailBtnText}>Chi tiết</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.quickStartBtn, styles.gradebookBtn]}
+                onPress={() =>
+                  router.push({
+                    pathname: `/class/[id]/assignment/[assignmentId]/gradebook` as any,
+                    params: {
+                      id: String(id),
+                      assignmentId: String(item.assignment_id),
+                    },
+                  })
+                }
+                activeOpacity={0.8}>
+                <Text style={styles.gradebookBtnText}>📊 Bảng điểm</Text>
+              </TouchableOpacity>
+            </View>
+          ) : studentStatus === 'COMPLETED' ? (
+            <View style={styles.completedActionRow}>
+              {item.mode === 'TEST' && (sub?.result_id || sub?.test_result_id) ? (
+                <TouchableOpacity
+                  style={[styles.quickStartBtn, { backgroundColor: '#10B981' }]}
+                  onPress={() =>
+                    router.push({
+                      pathname: `/study-set/[id]/test` as any,
+                      params: {
+                        id: String(item.set_id),
+                        assignmentId: String(item.assignment_id),
+                        classId: String(id),
+                        reviewResultId: String(sub.result_id || sub.test_result_id),
+                      },
+                    })
+                  }
+                  activeOpacity={0.8}>
+                  <Text style={styles.quickStartBtnText}>📊 Xem kết quả bài kiểm tra</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.quickStartBtn, { backgroundColor: '#10B981' }]}
+                  onPress={() => router.push(`/assignment/${item.assignment_id}` as any)}
+                  activeOpacity={0.8}>
+                  <Text style={styles.quickStartBtnText}>✓ Đã hoàn thành (Xem lại)</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : studentStatus === 'OVERDUE' ? (
+            <TouchableOpacity
+              style={[styles.quickStartBtn, styles.disabledBtn]}
+              disabled
+              activeOpacity={0.8}>
+              <Text style={styles.disabledBtnText}>⚠️ Đã hết hạn nộp bài</Text>
+            </TouchableOpacity>
+          ) : studentStatus === 'IN_PROGRESS' ? (
+            <TouchableOpacity
+              style={[styles.quickStartBtn, { backgroundColor: '#D97706' }]}
+              onPress={() => handleContinueAssignment(item)}
+              activeOpacity={0.8}>
+              <Text style={styles.quickStartBtnText}>Tiếp tục làm bài →</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.quickStartBtn, { backgroundColor: modeInfo.color }]}
+              onPress={() => handleStartAssignment(item)}
+              disabled={isStarting}
+              activeOpacity={0.8}>
+              {isStarting ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.quickStartBtnText}>Bắt đầu làm bài →</Text>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       </TouchableOpacity>
     );
@@ -493,6 +803,7 @@ export default function ClassDetailScreen() {
     const isMemberTeacher = item.member_role === 'TEACHER';
     const memberName = item.full_name || item.username || `Thành viên #${item.user_id}`;
     const memberLetter = (memberName[0] || 'U').toUpperCase();
+    const canRemove = isTeacherOwner && !isMemberTeacher;
 
     return (
       <View style={styles.memberCard}>
@@ -509,22 +820,43 @@ export default function ClassDetailScreen() {
             {memberName}
           </Text>
           <Text style={styles.memberUsername}>@{item.username}</Text>
+          {!!item.email && (
+            <Text style={styles.memberEmail} numberOfLines={1}>
+              ✉️ {item.email}
+            </Text>
+          )}
         </View>
 
-        <View
-          style={[
-            styles.roleBadge,
-            isMemberTeacher ? styles.roleTeacherBadge : styles.roleStudentBadge,
-          ]}>
-          <Text
+        <View style={styles.memberRight}>
+          <View
             style={[
-              styles.roleBadgeText,
-              isMemberTeacher
-                ? styles.roleTeacherBadgeText
-                : styles.roleStudentBadgeText,
+              styles.roleBadge,
+              isMemberTeacher ? styles.roleTeacherBadge : styles.roleStudentBadge,
             ]}>
-            {isMemberTeacher ? 'Giáo viên' : 'Học sinh'}
-          </Text>
+            <Text
+              style={[
+                styles.roleBadgeText,
+                isMemberTeacher
+                  ? styles.roleTeacherBadgeText
+                  : styles.roleStudentBadgeText,
+              ]}>
+              {isMemberTeacher ? 'Giáo viên' : 'Học sinh'}
+            </Text>
+          </View>
+
+          {canRemove && (
+            <TouchableOpacity
+              style={styles.removeMemberBtn}
+              onPress={() => handleRemoveMember(item)}
+              disabled={removingMemberId === item.user_id}
+              activeOpacity={0.7}>
+              {removingMemberId === item.user_id ? (
+                <ActivityIndicator size="small" color="#DC2626" />
+              ) : (
+                <Text style={styles.removeMemberBtnText}>Xóa khỏi lớp</Text>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     );
@@ -845,6 +1177,90 @@ export default function ClassDetailScreen() {
           </View>
         </Modal>
       )}
+
+      {/* Modal: Sửa thông tin lớp học (Giáo viên chủ lớp) */}
+      {isTeacherOwner && (
+        <Modal
+          visible={editClassModalVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            if (!editClassSubmitting) {
+              setEditClassModalVisible(false);
+              setEditClassError('');
+            }
+          }}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Sửa thông tin lớp học</Text>
+                <Text style={styles.modalSubtitle}>
+                  Cập nhật tên và mô tả cho lớp học của bạn.
+                </Text>
+              </View>
+
+              {!!editClassError && (
+                <View style={styles.modalErrorBox}>
+                  <Text style={styles.modalErrorText}>{editClassError}</Text>
+                </View>
+              )}
+
+              <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+                <Text style={styles.fieldLabel}>Tên lớp học *</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Nhập tên lớp học..."
+                  placeholderTextColor="#939BB4"
+                  value={editClassName}
+                  onChangeText={(val) => {
+                    setEditClassName(val);
+                    if (editClassError) setEditClassError('');
+                  }}
+                  editable={!editClassSubmitting}
+                />
+
+                <Text style={styles.fieldLabel}>Mô tả lớp học</Text>
+                <TextInput
+                  style={[styles.modalInput, styles.modalInputArea]}
+                  placeholder="Nhập mô tả lớp học (tùy chọn)..."
+                  placeholderTextColor="#939BB4"
+                  value={editClassDescription}
+                  onChangeText={setEditClassDescription}
+                  multiline
+                  numberOfLines={3}
+                  editable={!editClassSubmitting}
+                />
+              </ScrollView>
+
+              <View style={styles.modalButtonsRow}>
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => {
+                    setEditClassModalVisible(false);
+                    setEditClassError('');
+                  }}
+                  disabled={editClassSubmitting}>
+                  <Text style={styles.modalCancelBtnText}>Hủy</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.modalSubmitBtn,
+                    (!editClassName.trim() || editClassSubmitting) && styles.modalSubmitBtnDisabled,
+                  ]}
+                  onPress={handleEditClassSubmit}
+                  disabled={!editClassName.trim() || editClassSubmitting}>
+                  {editClassSubmitting ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.modalSubmitBtnText}>Lưu thay đổi</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -979,6 +1395,23 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#4255FF',
+  },
+  editClassBtn: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  editClassBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#334155',
   },
   codeCard: {
     flexDirection: 'row',
@@ -1139,7 +1572,37 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 6,
     marginBottom: 10,
+  },
+  studentStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  studentStatusBadgeIcon: {
+    fontSize: 10,
+    marginRight: 4,
+  },
+  studentStatusBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  disabledBtn: {
+    backgroundColor: '#E2E8F0',
+  },
+  disabledBtnText: {
+    color: '#94A3B8',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  completedActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   modeBadge: {
     flexDirection: 'row',
@@ -1236,6 +1699,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
   },
+  teacherActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  teacherDetailBtn: {
+    backgroundColor: '#F0F2F7',
+  },
+  teacherDetailBtnText: {
+    color: '#2E3856',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  gradebookBtn: {
+    backgroundColor: '#4255FF',
+  },
+  gradebookBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
   quickStartBtn: {
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -1306,6 +1790,29 @@ const styles = StyleSheet.create({
   },
   roleStudentBadgeText: {
     color: '#4F46E5',
+  },
+  memberEmail: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  memberRight: {
+    alignItems: 'flex-end',
+    gap: 6,
+    marginLeft: 8,
+  },
+  removeMemberBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
+  },
+  removeMemberBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#DC2626',
   },
   emptyCard: {
     backgroundColor: '#FFFFFF',

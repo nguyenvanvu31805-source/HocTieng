@@ -14,12 +14,11 @@ export default function AdminLayout() {
     <div className="admin-shell">
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark">Q</span>
-          <span>
-            QUIZLET
-            <br />
-            <b>QUẢN TRỊ</b>
-          </span>
+          <span className="brand-mark">🌱</span>
+          <div className="brand-text">
+            <span>QuizletClone</span>
+            <small>QUẢN TRỊ</small>
+          </div>
         </div>
         <div className="sidebar-label">Khu vực làm việc</div>
         <nav className="nav-list">

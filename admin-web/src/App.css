@@ -1,13 +1,24 @@
 :root {
-  --ink: #18221f;
-  --muted: #718078;
-  --line: #dce4de;
-  --paper: #f5f7f3;
-  --panel: #ffffff;
-  --green: #1f6653;
-  --mint: #dff0e8;
-  --orange: #e99354;
-  --red: #b94d45;
+  /* Brand Core - Modern Eco-Tech */
+  --color-lime: #CFFF74;
+  --color-lime-hover: #bde866;
+  --color-ink: #2F3A1D;
+  --color-sidebar: #232B16;
+  --color-bg: #F8FAF2;
+  --color-card: #FFFFFF;
+  --color-line: rgba(47, 58, 29, 0.12);
+  --color-line-solid: #E3E8D8;
+  --color-muted: #66705A;
+
+  --ink: #2F3A1D;
+  --muted: #66705A;
+  --line: #E3E8D8;
+  --paper: #F8FAF2;
+  --panel: #FFFFFF;
+  --green: #2F3A1D;
+  --mint: #E6F8BE;
+  --orange: #CFFF74;
+  --red: #D32F2F;
   --mono: "DM Mono", monospace;
 }
 
@@ -20,11 +31,11 @@
   background: var(--paper);
 }
 .sidebar {
-  width: 248px;
-  flex: 0 0 248px;
-  padding: 30px 20px 22px;
-  background: #173d35;
-  color: #eaf6ef;
+  width: 254px;
+  flex: 0 0 254px;
+  padding: 28px 18px 22px;
+  background: var(--color-sidebar);
+  color: #EAF6EF;
   display: flex;
   flex-direction: column;
 }
@@ -42,16 +53,34 @@
   font-weight: 500;
 }
 .brand-mark {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   display: inline-grid;
   place-items: center;
-  border-radius: 10px 10px 10px 2px;
-  background: var(--orange);
-  color: #173d35;
+  border-radius: 12px;
+  background: var(--color-lime);
+  color: var(--color-sidebar);
   font-weight: 800;
   font-size: 20px;
-  letter-spacing: 0;
+}
+.brand-text {
+  display: flex;
+  flex-direction: column;
+}
+.brand-text span {
+  font-size: 15px;
+  font-weight: 800;
+  color: #FFFFFF;
+  line-height: 1.1;
+  letter-spacing: -0.2px;
+}
+.brand-text small {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--color-lime);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-top: 2px;
 }
 .brand-mark.large {
   width: 58px;
@@ -78,34 +107,34 @@
   gap: 6px;
 }
 .nav-item {
-  color: #bed6ca;
+  color: #B2C4A7;
   display: flex;
   align-items: center;
-  gap: 13px;
-  padding: 12px;
+  gap: 12px;
+  padding: 10px 16px;
   text-decoration: none;
-  border-radius: 7px;
+  border-radius: 999px;
   font-size: 13px;
-  font-weight: 700;
-  transition:
-    background 0.2s,
-    color 0.2s;
+  font-weight: 600;
+  transition: all 0.15s ease;
 }
 .nav-item span {
-  color: #6e9c89;
+  color: #798E6E;
   font-family: var(--mono);
   font-size: 10px;
+  font-weight: 700;
 }
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: white;
+  background: rgba(207, 255, 116, 0.12);
+  color: var(--color-lime);
 }
 .nav-item.active {
-  background: #e4f2e8;
-  color: #173d35;
+  background: var(--color-lime);
+  color: var(--color-sidebar);
+  font-weight: 800;
 }
 .nav-item.active span {
-  color: var(--orange);
+  color: var(--color-sidebar);
 }
 .sidebar-footer {
   margin-top: auto;
@@ -261,9 +290,10 @@ h2 {
 .toolbar-panel,
 .table-panel,
 .editor-panel {
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-line-solid);
   background: var(--panel);
-  border-radius: 10px;
+  border-radius: 18px;
+  box-shadow: 0 2px 8px rgba(47, 58, 29, 0.03);
 }
 .metric-card {
   min-height: 168px;
@@ -769,11 +799,14 @@ td small {
 
 @media (max-width: 900px) {
   .sidebar {
-    width: 76px;
-    flex-basis: 76px;
-    padding: 24px 11px;
-    align-items: center;
-  }
+  width: 254px;
+  flex: 0 0 254px;
+  padding: 28px 18px 22px;
+  background: var(--color-sidebar);
+  color: #EAF6EF;
+  display: flex;
+  flex-direction: column;
+}
   .brand span:last-child,
   .sidebar-label,
   .nav-item:not(.active)::after,
@@ -880,4 +913,48 @@ td small {
   .detail-grid {
     grid-template-columns: 1fr;
   }
+}
+
+
+/* Modern Pill Buttons for Admin */
+.primary-button,
+.login-panel button,
+.modal-actions button[type="submit"] {
+  border-radius: 999px !important;
+  background: var(--color-ink) !important;
+  color: #FFFFFF !important;
+  font-weight: 700 !important;
+  transition: all 0.15s ease !important;
+}
+.primary-button:hover,
+.login-panel button:hover,
+.modal-actions button[type="submit"]:hover {
+  background: #3E4D27 !important;
+  transform: translateY(-1px);
+}
+.ghost-button,
+.secondary-button {
+  border-radius: 999px !important;
+  border: 1.5px solid var(--color-line-solid) !important;
+  font-weight: 600 !important;
+}
+.toolbar-panel input,
+.toolbar-panel select,
+.login-panel input,
+.editor-panel input,
+.editor-panel textarea,
+.editor-panel select {
+  border-radius: 12px !important;
+  border: 1.5px solid var(--color-line-solid) !important;
+  outline: none !important;
+  transition: border-color 0.15s, box-shadow 0.15s !important;
+}
+.toolbar-panel input:focus,
+.toolbar-panel select:focus,
+.login-panel input:focus,
+.editor-panel input:focus,
+.editor-panel textarea:focus,
+.editor-panel select:focus {
+  border-color: var(--color-ink) !important;
+  box-shadow: 0 0 0 3px rgba(207, 255, 116, 0.45) !important;
 }

@@ -43,6 +43,15 @@ const leaveClass = async (req, res) => {
   return success(res, result, result.message);
 };
 
+const removeMember = async (req, res) => {
+  const result = await classService.removeMember(
+    req.params.classId,
+    req.params.userId,
+    req.user,
+  );
+  return success(res, result, result.message);
+};
+
 module.exports = {
   createClass,
   getMyClasses,
@@ -51,4 +60,5 @@ module.exports = {
   joinClass,
   getClassMembers,
   leaveClass,
+  removeMember,
 };

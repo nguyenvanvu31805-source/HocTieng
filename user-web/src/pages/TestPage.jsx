@@ -1,6 +1,7 @@
-import {useCallback, useEffect, useMemo, useState} from "react";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {Link, useNavigate, useParams, useSearchParams} from "react-router-dom";
 import api from "../services/api";
+import assignmentService from "../services/assignmentService";
 import {getErrorMessage} from "../utils/errors";
 
 const normalizeAnswer = (value) =>
@@ -16,6 +17,8 @@ export default function TestPage() {
   const {setId} = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const retryResultId = searchParams.get("retryResultId");
+  const assignmentId = searchParams.get("assignmentId");
+  const classId = searchParams.get("classId");
   const navigate = useNavigate();
 
   const [studySet, setStudySet] = useState(null);
@@ -28,6 +31,9 @@ export default function TestPage() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
   const [submitError, setSubmitError] = useState("");
+  const [assignmentSubmitted, setAssignmentSubmitted] = useState(false);
+  const [assignmentError, setAssignmentError] = useState("");
+  const assignmentSubmittedRef = useRef(false);
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
   const [isRetrySession, setIsRetrySession] = useState(false);
   const [state, setState] = useState({loading: true, error: "", notFound: false});
@@ -236,6 +242,21 @@ export default function TestPage() {
         setResult({...nextResult, savedResult});
       }
       setCompleted(true);
+
+      if (assignmentId && savedResult?.result_id && !assignmentSubmittedRef.current) {
+        assignmentSubmittedRef.current = true;
+        try {
+          await assignmentService.submitAssignment(assignmentId, {
+            result_id: savedResult.result_id,
+          });
+          setAssignmentSubmitted(true);
+        } catch (assignErr) {
+          setAssignmentError(
+            getErrorMessage(assignErr) ||
+              "Không thể ghi nhận bài nộp. Vui lòng thử lại.",
+          );
+        }
+      }
     } catch (error) {
       setSubmitError(
         getErrorMessage(error) || "Không thể lưu kết quả kiểm tra.",
@@ -380,6 +401,18 @@ export default function TestPage() {
             Bạn làm đúng <strong>{result.correctAnswers}</strong> /{" "}
             <strong>{result.totalQuestions}</strong> câu.
           </p>
+
+          {assignmentSubmitted && (
+            <div className="assignment-success-banner">
+              🎉 Bạn đã hoàn thành bài tập và nộp bài thành công!
+            </div>
+          )}
+          {assignmentError && (
+            <div className="form-error" style={{marginBottom: "16px"}}>
+              {assignmentError}
+            </div>
+          )}
+
           <div className="test-result-grid">
             <div className="stat-box">
               <span className="stat-number">{result.totalQuestions}</span>
@@ -475,11 +508,32 @@ export default function TestPage() {
             <button className="button-secondary" onClick={handleRestartAll}>
               🔁 Làm lại toàn bộ bài
             </button>
+            {assignmentId && (
+              <button
+                className="button-primary"
+                style={{backgroundColor: "#4f46e5", borderColor: "#4f46e5"}}
+                onClick={() => {
+                  if (classId) {
+                    navigate(`/classes/${classId}`);
+                  } else {
+                    navigate("/classes");
+                  }
+                }}
+              >
+                🏫 Quay lại lớp học
+              </button>
+            )}
             <button
               className="button-small button-outline"
-              onClick={() => navigate(`/study-sets/${setId}`)}
+              onClick={() => {
+                if (assignmentId && classId) {
+                  navigate(`/classes/${classId}`);
+                } else {
+                  navigate(`/study-sets/${setId}`);
+                }
+              }}
             >
-              ← Quay lại bộ học
+              ← {assignmentId && classId ? "Quay lại lớp học" : "Quay lại bộ học"}
             </button>
           </div>
         </div>
@@ -490,8 +544,11 @@ export default function TestPage() {
   return (
     <div className="test-page">
       <div className="test-top-bar">
-        <Link className="back-link" to={`/study-sets/${setId}`}>
-          ← Quay lại bộ học
+        <Link
+          className="back-link"
+          to={assignmentId && classId ? `/classes/${classId}` : `/study-sets/${setId}`}
+        >
+          ← {assignmentId && classId ? "Quay lại lớp học" : "Quay lại bộ học"}
         </Link>
         <div className="test-title-block">
           <div style={{display: "flex", alignItems: "center", gap: "8px"}}>

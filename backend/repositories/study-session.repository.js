@@ -82,10 +82,82 @@ const getDbTodayDate = async () => {
   return rows[0]?.today_str || new Date().toISOString().slice(0, 10);
 };
 
+const getSessionsByUser = async (userId, {mode = null, limit = 50, offset = 0} = {}) => {
+  let query = `
+    SELECT 
+      s.session_id,
+      s.user_id,
+      s.set_id,
+      s.mode,
+      s.started_at,
+      s.ended_at,
+      s.score,
+      s.cards_studied,
+      CASE 
+        WHEN s.ended_at IS NOT NULL THEN GREATEST(0, TIMESTAMPDIFF(SECOND, s.started_at, s.ended_at))
+        ELSE GREATEST(0, TIMESTAMPDIFF(SECOND, s.started_at, NOW()))
+      END AS duration_seconds,
+      CASE
+        WHEN s.ended_at IS NOT NULL THEN 'COMPLETED'
+        ELSE 'IN_PROGRESS'
+      END AS status,
+      ss.title AS set_title,
+      ss.category AS set_category
+    FROM study_sessions s
+    LEFT JOIN study_sets ss ON ss.set_id = s.set_id
+    WHERE s.user_id = ?
+  `;
+  const params = [userId];
+
+  if (mode) {
+    query += ` AND s.mode = ?`;
+    params.push(mode);
+  }
+
+  query += ` ORDER BY s.started_at DESC LIMIT ? OFFSET ?`;
+  params.push(String(limit), String(offset));
+
+  const [rows] = await pool.execute(query, params);
+  return rows;
+};
+
+const findDetailById = async (sessionId) => {
+  const query = `
+    SELECT 
+      s.session_id,
+      s.user_id,
+      s.set_id,
+      s.mode,
+      s.started_at,
+      s.ended_at,
+      s.score,
+      s.cards_studied,
+      CASE 
+        WHEN s.ended_at IS NOT NULL THEN GREATEST(0, TIMESTAMPDIFF(SECOND, s.started_at, s.ended_at))
+        ELSE GREATEST(0, TIMESTAMPDIFF(SECOND, s.started_at, NOW()))
+      END AS duration_seconds,
+      CASE
+        WHEN s.ended_at IS NOT NULL THEN 'COMPLETED'
+        ELSE 'IN_PROGRESS'
+      END AS status,
+      ss.title AS set_title,
+      ss.description AS set_description,
+      ss.category AS set_category,
+      (SELECT COUNT(*) FROM cards c WHERE c.set_id = s.set_id) AS set_card_count
+    FROM study_sessions s
+    LEFT JOIN study_sets ss ON ss.set_id = s.set_id
+    WHERE s.session_id = ?
+  `;
+  const [rows] = await pool.execute(query, [sessionId]);
+  return rows[0] || null;
+};
+
 module.exports = {
   createSession,
   findById,
+  findDetailById,
   updateCompletion,
   getCompletedSessionsByUser,
+  getSessionsByUser,
   getDbTodayDate,
 };

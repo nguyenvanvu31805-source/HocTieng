@@ -219,9 +219,55 @@ const getStudyStats = async (user) => {
   };
 };
 
+const getSessions = async (user, query = {}) => {
+  const userId = await requireActiveUser(user);
+
+  let mode = null;
+  if (query.mode && query.mode !== "ALL") {
+    const rawMode = String(query.mode).trim().toUpperCase();
+    if (!ALLOWED_MODES.includes(rawMode)) {
+      throw new AppError(
+        `Invalid mode. Must be one of: ${ALLOWED_MODES.join(", ")}`,
+        400
+      );
+    }
+    mode = rawMode;
+  }
+
+  const limit = Math.min(Math.max(1, Number(query.limit) || 50), 100);
+  const page = Math.max(1, Number(query.page) || 1);
+  const offset = (page - 1) * limit;
+
+  const sessions = await studySessionRepository.getSessionsByUser(userId, {
+    mode,
+    limit,
+    offset,
+  });
+
+  return sessions;
+};
+
+const getSessionDetail = async (user, sessionIdParam) => {
+  const userId = await requireActiveUser(user);
+  const sessionId = parsePositiveId(sessionIdParam, "sessionId");
+
+  const session = await studySessionRepository.findDetailById(sessionId);
+  if (!session) {
+    throw new AppError("Study session not found", 404);
+  }
+
+  if (session.user_id !== userId && !isAdmin(user)) {
+    throw new AppError("You do not have permission to view this study session", 403);
+  }
+
+  return session;
+};
+
 module.exports = {
   startSession,
   completeSession,
   getStudyStats,
+  getSessions,
+  getSessionDetail,
   calculateStreaks,
 };

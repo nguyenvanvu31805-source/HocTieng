@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,7 @@ import { StudySet } from '@/types/studySet';
 import studySetService from '@/services/studySetService';
 import cardService from '@/services/cardService';
 import cardProgressService from '@/services/cardProgressService';
+import assignmentService from '@/services/assignmentService';
 import { playAudio } from '@/utils/audioPlayer';
 import useStudySession from '@/hooks/useStudySession';
 
@@ -57,7 +58,12 @@ function checkAnswer(userAnswer: string, targetDefinition: string): boolean {
 
 export default function LearnModeScreen() {
   const router = useRouter();
-  const { id, filter: initialFilter } = useLocalSearchParams<{ id: string; filter?: string }>();
+  const { id, filter: initialFilter, assignmentId, classId } = useLocalSearchParams<{
+    id: string;
+    filter?: string;
+    assignmentId?: string;
+    classId?: string;
+  }>();
   const [currentFilter, setCurrentFilter] = useState<string>(initialFilter || 'all');
 
   const [studySet, setStudySet] = useState<StudySet | null>(null);
@@ -73,6 +79,8 @@ export default function LearnModeScreen() {
   const [correctCount, setCorrectCount] = useState(0);
   const [wrongCount, setWrongCount] = useState(0);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [assignmentSubmitted, setAssignmentSubmitted] = useState(false);
+  const assignmentSubmittedRef = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
@@ -182,7 +190,7 @@ export default function LearnModeScreen() {
   };
 
   // Chuyển sang câu tiếp theo hoặc hoàn thành
-  const handleNextQuestion = () => {
+  const handleNextQuestion = async () => {
     if (currentIndex + 1 < shuffledCards.length) {
       setCurrentIndex((prev) => prev + 1);
       setUserAnswer('');
@@ -193,7 +201,19 @@ export default function LearnModeScreen() {
       setIsCompleted(true);
       const totalLen = shuffledCards.length;
       const score = totalLen > 0 ? Math.round((correctCount / totalLen) * 100) : 0;
-      completeSession({ score, cardsStudied: totalLen });
+      const sessionId = await completeSession({ score, cardsStudied: totalLen });
+
+      if (assignmentId && !assignmentSubmittedRef.current) {
+        assignmentSubmittedRef.current = true;
+        try {
+          await assignmentService.submitAssignment(assignmentId, {
+            session_id: sessionId || undefined,
+          });
+          setAssignmentSubmitted(true);
+        } catch (subErr) {
+          console.warn('Lỗi khi nộp bài tập:', subErr);
+        }
+      }
     }
   };
 
@@ -346,6 +366,19 @@ export default function LearnModeScreen() {
             <Text style={styles.resultGradeMessage}>{gradeMessage}</Text>
           </View>
 
+          {/* Banner nộp bài tập */}
+          {(assignmentSubmitted || assignmentId) && (
+            <View style={styles.assignmentSuccessBanner}>
+              <Text style={styles.assignmentSuccessIcon}>🎉</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.assignmentSuccessTitle}>Đã hoàn thành bài tập!</Text>
+                <Text style={styles.assignmentSuccessSub}>
+                  Độ chính xác: {accuracy}% – Kết quả đã được ghi nhận vào lớp học.
+                </Text>
+              </View>
+            </View>
+          )}
+
           {/* Vòng tròn phần trăm chính xác */}
           <View style={styles.accuracyCard}>
             <Text style={styles.accuracyLabel}>ĐỘ CHÍNH XÁC</Text>
@@ -381,6 +414,22 @@ export default function LearnModeScreen() {
 
           {/* Hàng nút hành động */}
           <View style={styles.resultButtonsContainer}>
+            {classId && (
+              <TouchableOpacity
+                style={styles.backToClassBtn}
+                onPress={() => router.replace(`/class/${classId}` as any)}
+                activeOpacity={0.8}>
+                <Text style={styles.backToClassBtnText}>🏫 Quay lại lớp học</Text>
+              </TouchableOpacity>
+            )}
+            {assignmentId && (
+              <TouchableOpacity
+                style={styles.backToAssignmentBtn}
+                onPress={() => router.replace(`/assignment/${assignmentId}` as any)}
+                activeOpacity={0.8}>
+                <Text style={styles.backToAssignmentBtnText}>📋 Xem chi tiết bài tập</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.restartButton}
               onPress={handleRestart}
@@ -1230,6 +1279,58 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   secondaryActionText: {
+    color: '#4255FF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  assignmentSuccessBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1.5,
+    borderColor: '#A7F3D0',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    width: '100%',
+  },
+  assignmentSuccessIcon: {
+    fontSize: 24,
+    marginRight: 10,
+  },
+  assignmentSuccessTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#065F46',
+    marginBottom: 2,
+  },
+  assignmentSuccessSub: {
+    fontSize: 12,
+    color: '#047857',
+    fontWeight: '600',
+  },
+  backToClassBtn: {
+    backgroundColor: '#4255FF',
+    paddingVertical: 13,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  backToClassBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  backToAssignmentBtn: {
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1.5,
+    borderColor: '#C7D2FE',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  backToAssignmentBtnText: {
     color: '#4255FF',
     fontSize: 14,
     fontWeight: '700',

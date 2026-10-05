@@ -16,9 +16,13 @@ const withoutPassword = (user) => {
   return safeUser;
 };
 
-const register = async ({username, email, password, full_name, fullName}) => {
+const register = async ({username, email, password, full_name, fullName, role}) => {
   if (!username || !email || !password) {
     throw new AppError("username, email and password are required", 400);
+  }
+  const allowedRoles = ["STUDENT", "TEACHER"];
+  if (!role || !allowedRoles.includes(role)) {
+    throw new AppError("Invalid role. Role must be either STUDENT or TEACHER", 400);
   }
   if (password.length < 6)
     throw new AppError("Password must be at least 6 characters", 400);
@@ -34,6 +38,7 @@ const register = async ({username, email, password, full_name, fullName}) => {
     email,
     passwordHash,
     fullName: full_name || fullName,
+    role,
   });
   const user = await authRepository.findById(userId);
   return withoutPassword(user);

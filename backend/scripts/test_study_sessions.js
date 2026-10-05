@@ -277,7 +277,7 @@ async function runTests() {
     for (let i = 0; i < 4; i++) {
       const [mRes] = await pool.execute(
         `INSERT INTO study_sessions (user_id, set_id, mode, started_at, ended_at, cards_studied)
-         VALUES (?, ?, 'FLASHCARDS', DATE_SUB(NOW(), INTERVAL ${i * 30 + 10} MINUTE), DATE_SUB(NOW(), INTERVAL ${i * 30} MINUTE), 5)`,
+         VALUES (?, ?, 'FLASHCARDS', DATE_SUB(NOW(), INTERVAL ${i * 2 + 1} MINUTE), DATE_SUB(NOW(), INTERVAL ${i * 2} MINUTE), 5)`,
         [userAId, testSetId]
       );
       createdSessionIds.push(mRes.insertId);

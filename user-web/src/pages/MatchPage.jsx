@@ -1,6 +1,8 @@
-import {useCallback, useEffect, useMemo, useState} from "react";
-import {Link, useNavigate, useParams} from "react-router-dom";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import {Link, useNavigate, useParams, useSearchParams} from "react-router-dom";
 import api from "../services/api";
+import assignmentService from "../services/assignmentService";
+import useStudySession from "../hooks/useStudySession";
 import {getErrorMessage} from "../utils/errors";
 
 const MAX_MATCH_PAIRS = 8;
@@ -22,6 +24,9 @@ const formatTime = (seconds) => {
 export default function MatchPage() {
   const {setId} = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const assignmentId = searchParams.get("assignmentId");
+  const classId = searchParams.get("classId");
 
   const [studySet, setStudySet] = useState(null);
   const [sourceCards, setSourceCards] = useState([]);
@@ -34,6 +39,14 @@ export default function MatchPage() {
   const [gameStarted, setGameStarted] = useState(false);
   const [gameFinished, setGameFinished] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [assignmentSubmitted, setAssignmentSubmitted] = useState(false);
+  const [assignmentError, setAssignmentError] = useState("");
+  const assignmentSubmittedRef = useRef(false);
+
+  const {completeSession, recordCardStudied} = useStudySession({
+    setId,
+    mode: "MATCH",
+  });
   const [state, setState] = useState({
     loading: true,
     error: "",
@@ -140,8 +153,35 @@ export default function MatchPage() {
       setSelectedDefinition(null);
       setWrongPair(null);
       if (nextMatchedCount === totalPairs) {
+        recordCardStudied(totalPairs);
         setGameFinished(true);
         setGameStarted(false);
+        if (assignmentId && !assignmentSubmittedRef.current) {
+          assignmentSubmittedRef.current = true;
+          completeSession({
+            score: null,
+            cardsStudied: totalPairs,
+          })
+            .then((completedSessionId) => {
+              if (completedSessionId) {
+                return assignmentService
+                  .submitAssignment(assignmentId, {
+                    session_id: completedSessionId,
+                  })
+                  .then(() => {
+                    setAssignmentSubmitted(true);
+                  });
+              } else {
+                setAssignmentError("Không thể xác thực phiên học để nộp bài.");
+              }
+            })
+            .catch((assignErr) => {
+              setAssignmentError(
+                getErrorMessage(assignErr) ||
+                  "Không thể ghi nhận bài nộp. Vui lòng thử lại."
+              );
+            });
+        }
       }
       return;
     }
@@ -212,11 +252,16 @@ export default function MatchPage() {
     );
   }
 
+  const backDestination =
+    assignmentId && classId ? `/classes/${classId}` : `/study-sets/${setId}`;
+  const backLabel =
+    assignmentId && classId ? "← Quay lại lớp học" : "← Quay lại bộ học";
+
   if (state.error) {
     return (
       <div className="match-page">
-        <Link className="back-link" to={`/study-sets/${setId}`}>
-          ← Quay lại bộ học
+        <Link className="back-link" to={backDestination}>
+          {backLabel}
         </Link>
         <div className="form-error">Lỗi: {state.error}</div>
         <div className="match-error-actions">
@@ -225,7 +270,7 @@ export default function MatchPage() {
           </button>
           <button
             className="button-small button-outline"
-            onClick={() => navigate(`/study-sets/${setId}`)}
+            onClick={() => navigate(backDestination)}
           >
             Quay lại
           </button>
@@ -237,17 +282,17 @@ export default function MatchPage() {
   if (!totalPairs) {
     return (
       <div className="match-page">
-        <Link className="back-link" to={`/study-sets/${setId}`}>
-          ← Quay lại bộ học
+        <Link className="back-link" to={backDestination}>
+          {backLabel}
         </Link>
         <div className="empty-panel">
           <h2>Bộ học chưa có thẻ để chơi.</h2>
           <p className="muted">Vui lòng thêm thẻ có thuật ngữ và định nghĩa.</p>
           <button
             className="button-primary"
-            onClick={() => navigate(`/study-sets/${setId}`)}
+            onClick={() => navigate(backDestination)}
           >
-            Quay lại bộ học
+            Quay lại
           </button>
         </div>
       </div>
@@ -263,6 +308,18 @@ export default function MatchPage() {
           <p className="completion-subtitle">
             Bộ học: <strong>{studySet?.title}</strong>
           </p>
+
+          {assignmentSubmitted && (
+            <div className="assignment-success-banner">
+              🎉 Bạn đã hoàn thành bài tập và nộp bài thành công!
+            </div>
+          )}
+          {assignmentError && (
+            <div className="form-error" style={{marginBottom: "16px"}}>
+              {assignmentError}
+            </div>
+          )}
+
           <div className="learn-result-grid">
             <div className="stat-box">
               <span className="stat-number">{totalPairs}</span>
@@ -274,14 +331,29 @@ export default function MatchPage() {
             </div>
           </div>
           <div className="completion-actions">
-            <button className="button-primary" onClick={handleRestart}>
+            {assignmentId && (
+              <button
+                className="button-primary"
+                style={{backgroundColor: "#4f46e5", borderColor: "#4f46e5"}}
+                onClick={() => {
+                  if (classId) {
+                    navigate(`/classes/${classId}`);
+                  } else {
+                    navigate("/classes");
+                  }
+                }}
+              >
+                🏫 Quay lại lớp học
+              </button>
+            )}
+            <button className="button-secondary" onClick={handleRestart}>
               Chơi lại
             </button>
             <button
               className="button-small button-secondary"
-              onClick={() => navigate(`/study-sets/${setId}`)}
+              onClick={() => navigate(backDestination)}
             >
-              ← Quay lại bộ thẻ
+              {backLabel}
             </button>
           </div>
         </div>
@@ -292,8 +364,8 @@ export default function MatchPage() {
   return (
     <div className="match-page">
       <div className="match-top-bar">
-        <Link className="back-link" to={`/study-sets/${setId}`}>
-          ← Quay lại bộ học
+        <Link className="back-link" to={backDestination}>
+          {backLabel}
         </Link>
         <div className="match-title-block">
           <span className="eyebrow">GHÉP THẺ</span>

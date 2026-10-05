@@ -21,8 +21,21 @@ export const getStudyStats = async () => {
   return data?.data || null;
 };
 
+export const getSessions = async (params = {}) => {
+  const { data } = await api.get("/study-sessions", { params });
+  return data?.data || [];
+};
+
+export const getSessionDetail = async (sessionId) => {
+  const { data } = await api.get(`/study-sessions/${sessionId}`);
+  return data?.data || null;
+};
+
 export default {
   startSession,
   completeSession,
   getStudyStats,
+  getSessions,
+  getSessionDetail,
 };
+

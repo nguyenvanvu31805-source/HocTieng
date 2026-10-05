@@ -41,12 +41,12 @@ const findByEmail = async (email) => {
   return rows[0] || null;
 };
 
-const create = async ({username, email, passwordHash, fullName}) => {
+const create = async ({username, email, passwordHash, fullName, role = "STUDENT"}) => {
   const [result] = await pool.execute(
     `INSERT INTO users
       (username, email, password_hash, full_name, role, status)
-     VALUES (?, ?, ?, ?, 'STUDENT', 'ACTIVE')`,
-    [username, email, passwordHash, fullName || null],
+     VALUES (?, ?, ?, ?, ?, 'ACTIVE')`,
+    [username, email, passwordHash, fullName || null, role],
   );
   return result.insertId;
 };

@@ -43,10 +43,48 @@ const deleteAssignment = async (req, res) => {
   return success(res, result, result.message);
 };
 
+const getMySubmission = async (req, res) => {
+  const result = await assignmentService.getMySubmission(
+    req.params.assignmentId,
+    req.user,
+  );
+  return success(res, result, "Lấy thông tin bài nộp thành công.");
+};
+
+const startAssignment = async (req, res) => {
+  const result = await assignmentService.startAssignment(
+    req.params.assignmentId,
+    req.user,
+  );
+  return success(res, result, "Bắt đầu làm bài tập thành công.");
+};
+
+const submitAssignment = async (req, res) => {
+  const result = await assignmentService.submitAssignment(
+    req.params.assignmentId,
+    req.body,
+    req.user,
+  );
+  return success(res, result, "Nộp bài tập thành công.");
+};
+
+const getGradebook = async (req, res) => {
+  const result = await assignmentService.getGradebook(
+    req.params.classId,
+    req.params.assignmentId,
+    req.user,
+  );
+  return success(res, result, "Lấy bảng điểm bài tập thành công.");
+};
+
 module.exports = {
   createAssignment,
   getClassAssignments,
   getAssignmentDetail,
   updateAssignment,
   deleteAssignment,
+  getMySubmission,
+  startAssignment,
+  submitAssignment,
+  getGradebook,
 };

@@ -202,6 +202,33 @@ export default function ProfileScreen() {
 
             <TouchableOpacity
               style={styles.classesButton}
+              onPress={() => router.push('/learning-history' as any)}
+              activeOpacity={0.8}>
+              <Text style={styles.classesButtonIcon}>📚</Text>
+              <Text style={styles.classesButtonText}>Lịch sử học tập</Text>
+              <Text style={styles.classesButtonArrow}>›</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.classesButton}
+              onPress={() => router.push('/achievements' as any)}
+              activeOpacity={0.8}>
+              <Text style={styles.classesButtonIcon}>🏆</Text>
+              <Text style={styles.classesButtonText}>Thành tích</Text>
+              <Text style={styles.classesButtonArrow}>›</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.classesButton}
+              onPress={() => router.push('/reminder-settings' as any)}
+              activeOpacity={0.8}>
+              <Text style={styles.classesButtonIcon}>🔔</Text>
+              <Text style={styles.classesButtonText}>Nhắc học</Text>
+              <Text style={styles.classesButtonArrow}>›</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.classesButton}
               onPress={() => router.push('/classes' as any)}
               activeOpacity={0.8}>
               <Text style={styles.classesButtonIcon}>🏫</Text>

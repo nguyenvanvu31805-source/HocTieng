@@ -7,20 +7,40 @@ import '@/global.css';
 
 import { Platform } from 'react-native';
 
+export const EcoColors = {
+  lime: '#CFFF74',
+  limeHover: '#bde866',
+  limeLight: '#F4FDE2',
+  oliveInk: '#2F3A1D',
+  oliveInkLight: '#44532B',
+  background: '#F8FAF2',
+  card: '#FFFFFF',
+  border: 'rgba(47, 58, 29, 0.12)',
+  borderSolid: '#E5EAD9',
+  muted: '#66705A',
+  mutedLight: '#8E9A80',
+  success: '#2E7D32',
+  successBg: '#EDF7ED',
+  warning: '#D97706',
+  warningBg: '#FEF3C7',
+  error: '#D32F2F',
+  errorBg: '#FEE2E2',
+} as const;
+
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
+    text: '#2F3A1D',
+    background: '#F8FAF2',
+    backgroundElement: '#F0F4E8',
+    backgroundSelected: '#E6F8BE',
+    textSecondary: '#66705A',
   },
   dark: {
     text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    background: '#1A2111',
+    backgroundElement: '#252F18',
+    backgroundSelected: '#334021',
+    textSecondary: '#A2B092',
   },
 } as const;
 

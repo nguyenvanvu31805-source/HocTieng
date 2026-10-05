@@ -1,6 +1,8 @@
-import {useEffect, useState, useCallback} from "react";
+import {useEffect, useState, useCallback, useRef} from "react";
 import {Link, useNavigate, useParams, useSearchParams} from "react-router-dom";
 import api from "../services/api";
+import assignmentService from "../services/assignmentService";
+import useStudySession from "../hooks/useStudySession";
 import {getErrorMessage} from "../utils/errors";
 
 export default function FlashcardsPage() {
@@ -8,12 +10,22 @@ export default function FlashcardsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const filter = searchParams.get("filter") || "all";
+  const assignmentId = searchParams.get("assignmentId");
+  const classId = searchParams.get("classId");
 
   const [studySet, setStudySet] = useState(null);
   const [cards, setCards] = useState([]);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [assignmentSubmitted, setAssignmentSubmitted] = useState(false);
+  const [assignmentError, setAssignmentError] = useState("");
+  const assignmentSubmittedRef = useRef(false);
+
+  const {completeSession, recordCardStudied} = useStudySession({
+    setId,
+    mode: "FLASHCARDS",
+  });
 
   const [state, setState] = useState({
     loading: true,
@@ -67,14 +79,38 @@ export default function FlashcardsPage() {
     fetchData();
   }, [fetchData]);
 
-  const handleNext = useCallback(() => {
+  const handleNext = useCallback(async () => {
     if (currentCardIndex < cards.length - 1) {
+      recordCardStudied(currentCardIndex + 1);
       setCurrentCardIndex((prev) => prev + 1);
       setIsFlipped(false);
     } else {
+      recordCardStudied(cards.length);
       setIsCompleted(true);
+      if (assignmentId && !assignmentSubmittedRef.current) {
+        assignmentSubmittedRef.current = true;
+        try {
+          const completedSessionId = await completeSession({
+            score: null,
+            cardsStudied: cards.length,
+          });
+          if (completedSessionId) {
+            await assignmentService.submitAssignment(assignmentId, {
+              session_id: completedSessionId,
+            });
+            setAssignmentSubmitted(true);
+          } else {
+            setAssignmentError("Không thể xác thực phiên học để nộp bài.");
+          }
+        } catch (assignErr) {
+          setAssignmentError(
+            getErrorMessage(assignErr) ||
+              "Không thể ghi nhận bài nộp. Vui lòng thử lại."
+          );
+        }
+      }
     }
-  }, [currentCardIndex, cards.length]);
+  }, [currentCardIndex, cards.length, assignmentId, completeSession, recordCardStudied]);
 
   const handlePrev = useCallback(() => {
     if (currentCardIndex > 0) {
@@ -169,11 +205,16 @@ export default function FlashcardsPage() {
     );
   }
 
+  const backDestination =
+    assignmentId && classId ? `/classes/${classId}` : `/study-sets/${setId}`;
+  const backLabel =
+    assignmentId && classId ? "← Quay lại lớp học" : "← Quay lại bộ học";
+
   if (state.error) {
     return (
       <div className="flashcards-page">
-        <Link className="back-link" to={`/study-sets/${setId}`}>
-          ← Quay lại bộ học
+        <Link className="back-link" to={backDestination}>
+          {backLabel}
         </Link>
         <div className="form-error">Lỗi: {state.error}</div>
         <div className="flashcards-error-actions">
@@ -182,7 +223,7 @@ export default function FlashcardsPage() {
           </button>
           <button
             className="button-small button-outline"
-            onClick={() => navigate(`/study-sets/${setId}`)}
+            onClick={() => navigate(backDestination)}
           >
             Quay lại
           </button>
@@ -206,8 +247,8 @@ export default function FlashcardsPage() {
 
     return (
       <div className="flashcards-page">
-        <Link className="back-link" to={`/study-sets/${setId}`}>
-          ← Quay lại bộ học
+        <Link className="back-link" to={backDestination}>
+          {backLabel}
         </Link>
         <div className="empty-panel">
           <h2>{isFiltered ? "Không có thẻ trong phạm vi này" : "Study Set này chưa có thẻ."}</h2>
@@ -223,9 +264,9 @@ export default function FlashcardsPage() {
             )}
             <button
               className={isFiltered ? "button-small button-outline" : "button-primary"}
-              onClick={() => navigate(`/study-sets/${setId}`)}
+              onClick={() => navigate(backDestination)}
             >
-              Quay lại bộ học
+              Quay lại
             </button>
           </div>
         </div>
@@ -242,6 +283,18 @@ export default function FlashcardsPage() {
           <p className="completion-subtitle">
             Bộ học: <strong>{studySet?.title}</strong>
           </p>
+
+          {assignmentSubmitted && (
+            <div className="assignment-success-banner">
+              🎉 Bạn đã hoàn thành bài tập và nộp bài thành công!
+            </div>
+          )}
+          {assignmentError && (
+            <div className="form-error" style={{marginBottom: "16px"}}>
+              {assignmentError}
+            </div>
+          )}
+
           <div className="completion-stats">
             <div className="stat-box">
               <span className="stat-number">{cards.length}</span>
@@ -249,14 +302,29 @@ export default function FlashcardsPage() {
             </div>
           </div>
           <div className="completion-actions">
-            <button className="button-primary" onClick={handleRestart}>
+            {assignmentId && (
+              <button
+                className="button-primary"
+                style={{backgroundColor: "#4f46e5", borderColor: "#4f46e5"}}
+                onClick={() => {
+                  if (classId) {
+                    navigate(`/classes/${classId}`);
+                  } else {
+                    navigate("/classes");
+                  }
+                }}
+              >
+                🏫 Quay lại lớp học
+              </button>
+            )}
+            <button className="button-secondary" onClick={handleRestart}>
               Học lại
             </button>
             <button
               className="button-small button-secondary"
-              onClick={() => navigate(`/study-sets/${setId}`)}
+              onClick={() => navigate(backDestination)}
             >
-              ← Quay lại bộ học
+              {backLabel}
             </button>
           </div>
         </div>
@@ -272,8 +340,8 @@ export default function FlashcardsPage() {
   return (
     <div className="flashcards-page">
       <div className="flashcards-top-bar">
-        <Link className="back-link" to={`/study-sets/${setId}`}>
-          ← Quay lại bộ học
+        <Link className="back-link" to={backDestination}>
+          {backLabel}
         </Link>
         <div style={{display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap"}}>
           <h2 className="flashcards-set-title">{studySet?.title}</h2>

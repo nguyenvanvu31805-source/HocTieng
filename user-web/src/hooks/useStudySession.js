@@ -55,17 +55,18 @@ export function useStudySession({ setId = null, mode, enabled = true }) {
 
   const completeSession = useCallback(
     async ({ score = null, cardsStudied } = {}) => {
-      if (!sessionIdRef.current || completedRef.current) return;
+      if (!sessionIdRef.current || completedRef.current) return sessionIdRef.current;
       completedRef.current = true;
       const finalCards =
         cardsStudied !== undefined ? cardsStudied : cardsStudiedRef.current;
       try {
-        await studySessionService.completeSession(sessionIdRef.current, {
+        const res = await studySessionService.completeSession(sessionIdRef.current, {
           score,
           cards_studied: finalCards,
         });
+        return res?.session_id || sessionIdRef.current;
       } catch {
-        // Fallback safely
+        return sessionIdRef.current;
       }
     },
     []
@@ -73,6 +74,7 @@ export function useStudySession({ setId = null, mode, enabled = true }) {
 
   return {
     sessionIdRef,
+    getSessionId: () => sessionIdRef.current,
     recordCardStudied,
     completeSession,
   };

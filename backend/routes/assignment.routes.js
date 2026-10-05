@@ -35,4 +35,28 @@ router.delete(
   asyncHandler(assignmentController.deleteAssignment),
 );
 
+router.get(
+  "/assignments/:assignmentId/my-submission",
+  authenticate,
+  asyncHandler(assignmentController.getMySubmission),
+);
+
+router.post(
+  "/assignments/:assignmentId/start",
+  authenticate,
+  asyncHandler(assignmentController.startAssignment),
+);
+
+router.post(
+  "/assignments/:assignmentId/submit",
+  authenticate,
+  asyncHandler(assignmentController.submitAssignment),
+);
+
+router.get(
+  "/classes/:classId/assignments/:assignmentId/gradebook",
+  authenticate,
+  asyncHandler(assignmentController.getGradebook),
+);
+
 module.exports = router;

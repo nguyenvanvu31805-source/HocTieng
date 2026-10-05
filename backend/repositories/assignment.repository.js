@@ -87,10 +87,129 @@ const deleteAssignment = async (assignmentId) => {
   return result.affectedRows > 0;
 };
 
+const findSubmission = async (assignmentId, userId) => {
+  const [rows] = await pool.execute(
+    `SELECT submission_id, assignment_id, user_id, status, score,
+            result_id, session_id, started_at, submitted_at, created_at, updated_at
+     FROM assignment_submissions
+     WHERE assignment_id = ? AND user_id = ?
+     LIMIT 1`,
+    [assignmentId, userId],
+  );
+  return rows[0] || null;
+};
+
+const findSubmissionById = async (submissionId) => {
+  const [rows] = await pool.execute(
+    `SELECT submission_id, assignment_id, user_id, status, score,
+            result_id, session_id, started_at, submitted_at, created_at, updated_at
+     FROM assignment_submissions
+     WHERE submission_id = ?
+     LIMIT 1`,
+    [submissionId],
+  );
+  return rows[0] || null;
+};
+
+const createSubmission = async ({
+  assignmentId,
+  userId,
+  status = "IN_PROGRESS",
+  score = null,
+  resultId = null,
+  sessionId = null,
+  startedAt = null,
+  submittedAt = null,
+}) => {
+  const [result] = await pool.execute(
+    `INSERT INTO assignment_submissions (
+       assignment_id, user_id, status, score, result_id, session_id, started_at, submitted_at, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, NOW()), ?, NOW(), NOW())`,
+    [
+      assignmentId,
+      userId,
+      status,
+      score !== null && score !== undefined ? score : null,
+      resultId || null,
+      sessionId || null,
+      startedAt || null,
+      submittedAt || null,
+    ],
+  );
+  return findSubmissionById(result.insertId);
+};
+
+const updateSubmission = async ({
+  submissionId,
+  status,
+  score = null,
+  resultId = null,
+  sessionId = null,
+  submittedAt = null,
+}) => {
+  await pool.execute(
+    `UPDATE assignment_submissions
+     SET status = ?, score = ?, result_id = ?, session_id = ?,
+         submitted_at = COALESCE(?, NOW()), updated_at = NOW()
+     WHERE submission_id = ?`,
+    [
+      status,
+      score !== null && score !== undefined ? score : null,
+      resultId || null,
+      sessionId || null,
+      submittedAt || null,
+      submissionId,
+    ],
+  );
+  return findSubmissionById(submissionId);
+};
+
+const updateSubmissionStatus = async (submissionId, status) => {
+  await pool.execute(
+    `UPDATE assignment_submissions
+     SET status = ?, updated_at = NOW()
+     WHERE submission_id = ?`,
+    [status, submissionId],
+  );
+  return findSubmissionById(submissionId);
+};
+
+const getGradebook = async (classId, assignmentId) => {
+  const [rows] = await pool.execute(
+    `SELECT 
+       cm.user_id,
+       u.username,
+       u.full_name,
+       u.email,
+       u.avatar_url,
+       sub.submission_id,
+       sub.status AS raw_status,
+       sub.score,
+       sub.started_at,
+       sub.submitted_at,
+       sub.result_id,
+       sub.session_id
+     FROM class_members cm
+     INNER JOIN users u ON u.user_id = cm.user_id
+     LEFT JOIN assignment_submissions sub 
+       ON sub.user_id = cm.user_id AND sub.assignment_id = ?
+     WHERE cm.class_id = ? AND cm.member_role = 'STUDENT'
+     ORDER BY u.full_name ASC, u.username ASC`,
+    [assignmentId, classId],
+  );
+  return rows;
+};
+
 module.exports = {
   createAssignment,
   findById,
   findByClassId,
   updateAssignment,
   deleteAssignment,
+  findSubmission,
+  findSubmissionById,
+  createSubmission,
+  updateSubmission,
+  updateSubmissionStatus,
+  getGradebook,
 };

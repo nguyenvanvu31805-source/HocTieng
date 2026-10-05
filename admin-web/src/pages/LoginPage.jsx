@@ -20,23 +20,22 @@ export default function LoginPage() {
   return (
     <main className="login-page">
       <section className="login-aside">
-        <span className="brand-mark large">Q</span>
-        <p className="eyebrow">VẬN HÀNH HỆ THỐNG THẺ TỪ</p>
+        <span className="brand-mark large">🌱</span>
+        <p className="eyebrow">HỆ THỐNG QUẢN TRỊ QUIZLETCLONE</p>
         <h1>Duy trì nhịp học tập.</h1>
         <p className="login-note">
-          Một nơi tập trung để theo dõi hệ thống từ vựng và duy trì hoạt động ổn
-          định.
+          Bảng điều khiển tập trung để theo dõi người dùng, quản trị bộ học và thẻ từ vựng ổn định.
         </p>
         <div className="login-orbit">
           <span>QUẢN TRỊ</span>
           <span>BỘ HỌC</span>
-          <span>THẺ TỪ</span>
+          <span>NGƯỜI DÙNG</span>
         </div>
       </section>
       <section className="login-panel">
         <div className="login-form-wrap">
           <div className="mobile-brand">
-            <span className="brand-mark">Q</span> QUIZLET QUẢN TRỊ
+            <span className="brand-mark">🌱</span> QUIZLETCLONE QUẢN TRỊ
           </div>
           <p className="eyebrow">TRUY CẬP BẢO MẬT</p>
           <h2>Chào mừng trở lại</h2>

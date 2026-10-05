@@ -10,34 +10,75 @@ export default function RegisterPage() {
     email: "",
     password: "",
     full_name: "",
+    role: "STUDENT",
   });
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
+
   const submit = async (event) => {
     event.preventDefault();
     setError("");
+
+    if (!form.role || (form.role !== "STUDENT" && form.role !== "TEACHER")) {
+      setError("Vui lòng chọn vai trò: Học viên hoặc Giáo viên.");
+      return;
+    }
+
+    if (form.password !== confirmPassword) {
+      setError("Mật khẩu xác nhận không khớp.");
+      return;
+    }
+
     try {
       await register(form);
     } catch (requestError) {
       setError(getErrorMessage(requestError));
     }
   };
+
   return (
     <div className="auth-page">
       <div className="auth-art register-art">
-        <span className="wordmark-mark">L</span>
-        <p className="eyebrow">MỞ RA KHÔNG GIAN TÒ MÒ</p>
+        <span className="wordmark-mark">🌱</span>
+        <p className="eyebrow">THAM GIA CÙNG QUIZLETCLONE</p>
         <h1>
-          Một thói quen
+          Learn smarter.
           <br />
-          <em>học tốt hơn.</em>
+          <em>Grow every day.</em>
         </h1>
-        <p>Tạo hồ sơ học tập và biến mỗi từ mới thành một bước tiến.</p>
+        <p>Tạo tài khoản học tập, luyện từ vựng bền bỉ và theo dõi sự tiến bộ mỗi ngày.</p>
       </div>
       <div className="auth-card">
         <p className="eyebrow">BẮT ĐẦU NGAY</p>
         <h2>Tạo tài khoản</h2>
-        <p className="muted">Tài khoản mới sẽ có vai trò Học viên.</p>
+        <p className="muted">
+          {form.role === "TEACHER"
+            ? "Đăng ký tài khoản Giáo viên để quản lý lớp học và bài tập."
+            : "Đăng ký tài khoản Học viên để học và luyện tập từ vựng."}
+        </p>
         <form onSubmit={submit}>
+          <div className="role-selection-group">
+            <span className="role-selection-label">Bạn muốn đăng ký với vai trò nào?</span>
+            <div className="role-cards">
+              <button
+                type="button"
+                className={`role-card ${form.role === "STUDENT" ? "selected" : ""}`}
+                onClick={() => setForm({...form, role: "STUDENT"})}
+              >
+                <span className="role-card-title">HỌC VIÊN</span>
+                <span className="role-card-desc">Học và luyện tập</span>
+              </button>
+              <button
+                type="button"
+                className={`role-card ${form.role === "TEACHER" ? "selected" : ""}`}
+                onClick={() => setForm({...form, role: "TEACHER"})}
+              >
+                <span className="role-card-title">GIÁO VIÊN</span>
+                <span className="role-card-desc">Quản lý lớp học</span>
+              </button>
+            </div>
+          </div>
+
           <label>
             Họ và tên
             <input
@@ -83,6 +124,17 @@ export default function RegisterPage() {
                 setForm({...form, password: event.target.value})
               }
               placeholder="Ít nhất 6 ký tự"
+            />
+          </label>
+          <label>
+            Xác nhận mật khẩu
+            <input
+              required
+              minLength="6"
+              type="password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              placeholder="Nhập lại mật khẩu"
             />
           </label>
           {error && <div className="form-error">{error}</div>}

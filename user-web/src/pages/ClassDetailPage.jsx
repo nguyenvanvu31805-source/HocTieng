@@ -1,10 +1,18 @@
 import {useEffect, useState, useCallback} from "react";
 import {Link, useParams, useNavigate} from "react-router-dom";
 import api from "../services/api";
+import assignmentService from "../services/assignmentService";
 import {useAuth} from "../context/useAuth";
 import {getErrorMessage} from "../utils/errors";
 
 const MODE_MAP = {
+  ALL: {
+    label: "Tất cả",
+    icon: "🌟",
+    path: "",
+    color: "#7c3aed",
+    description: "Học viên được tự do chọn bất kỳ chế độ học nào",
+  },
   FLASHCARDS: {
     label: "Thẻ lật",
     icon: "🎴",
@@ -31,6 +39,19 @@ const MODE_MAP = {
   },
 };
 
+const formatDateTime = (dateStr) => {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("vi-VN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
 export default function ClassDetailPage() {
   const {classId} = useParams();
   const navigate = useNavigate();
@@ -38,6 +59,10 @@ export default function ClassDetailPage() {
 
   const [classData, setClassData] = useState(null);
   const [assignments, setAssignments] = useState([]);
+  const [submissions, setSubmissions] = useState({});
+  const [submissionsLoading, setSubmissionsLoading] = useState(false);
+  const [startingAssignId, setStartingAssignId] = useState(null);
+  const [detailModalAssignment, setDetailModalAssignment] = useState(null);
   const [members, setMembers] = useState([]);
   const [activeTab, setActiveTab] = useState("assignments"); // 'assignments' | 'members'
   const [loading, setLoading] = useState(true);
@@ -54,7 +79,10 @@ export default function ClassDetailPage() {
 
   // Create Assignment Modal State
   const [showAssignModal, setShowAssignModal] = useState(false);
-  const [availableSets, setAvailableSets] = useState([]);
+  const [mySets, setMySets] = useState([]);
+  const [publicSets, setPublicSets] = useState([]);
+  const [setsLoading, setSetsLoading] = useState(false);
+  const [setsError, setSetsError] = useState("");
   const [assignForm, setAssignForm] = useState({
     set_id: "",
     title: "",
@@ -64,6 +92,17 @@ export default function ClassDetailPage() {
   });
   const [assignLoading, setAssignLoading] = useState(false);
   const [assignError, setAssignError] = useState("");
+
+  // Edit Assignment Modal State (Teacher)
+  const [editAssignModal, setEditAssignModal] = useState(null);
+  const [editAssignForm, setEditAssignForm] = useState({
+    title: "",
+    description: "",
+    mode: "LEARN",
+    deadline: "",
+  });
+  const [editAssignLoading, setEditAssignLoading] = useState(false);
+  const [editAssignError, setEditAssignError] = useState("");
 
   const isTeacher =
     classData?.is_teacher || user?.role === "TEACHER" || user?.role === "ADMIN";
@@ -78,21 +117,50 @@ export default function ClassDetailPage() {
         api.get(`/classes/${classId}/members`).catch(() => ({data: {data: []}})),
       ]);
 
-      setClassData(classRes.data?.data);
-      setAssignments(assignRes.data?.data || []);
+      const classInfo = classRes.data?.data;
+      const assignList = assignRes.data?.data || [];
+      setClassData(classInfo);
+      setAssignments(assignList);
       setMembers(membersRes.data?.data || []);
+
+      const isTeacherUser =
+        classInfo?.teacher_id === user?.user_id ||
+        user?.role === "TEACHER" ||
+        user?.role === "ADMIN";
+
+      if (!isTeacherUser && assignList.length > 0) {
+        setSubmissionsLoading(true);
+        try {
+          const subResults = await Promise.all(
+            assignList.map((a) =>
+              assignmentService.getMySubmission(a.assignment_id).catch(() => null)
+            )
+          );
+          const subMap = {};
+          assignList.forEach((a, idx) => {
+            if (subResults[idx]) {
+              subMap[a.assignment_id] = subResults[idx];
+            }
+          });
+          setSubmissions(subMap);
+        } catch {
+          // ignore
+        } finally {
+          setSubmissionsLoading(false);
+        }
+      }
     } catch (err) {
       setError(getErrorMessage(err) || "Không thể tải thông tin lớp học.");
     } finally {
       setLoading(false);
     }
-  }, [classId]);
+  }, [classId, user?.user_id, user?.role]);
 
   useEffect(() => {
     fetchAllData();
   }, [fetchAllData]);
 
-  // Fetch Teacher's Study Sets when opening Create Assignment modal
+  // Fetch Teacher's Study Sets & Public Study Sets when opening Create Assignment modal
   const handleOpenAssignModal = async () => {
     setAssignForm({
       set_id: "",
@@ -102,29 +170,35 @@ export default function ClassDetailPage() {
       deadline: "",
     });
     setAssignError("");
+    setSetsError("");
     setShowAssignModal(true);
+    setSetsLoading(true);
 
     try {
-      // Try to get teacher's sets
-      const {data} = await api.get("/study-sets/my");
-      const mySets = data?.data || [];
-      if (mySets.length > 0) {
-        setAvailableSets(mySets);
-        setAssignForm((prev) => ({...prev, set_id: String(mySets[0].set_id)}));
-      } else {
-        // Fallback to explore/public sets
-        const exploreRes = await api.get("/study-sets?limit=20");
-        const publicSets = exploreRes.data?.data || [];
-        setAvailableSets(publicSets);
-        if (publicSets.length > 0) {
-          setAssignForm((prev) => ({
-            ...prev,
-            set_id: String(publicSets[0].set_id),
-          }));
-        }
+      const [myRes, pubRes] = await Promise.all([
+        api.get("/study-sets/my").catch(() => ({data: {data: []}})),
+        api.get("/study-sets?limit=100").catch(() => ({data: {data: []}})),
+      ]);
+
+      const my = myRes.data?.data || [];
+      const pubRaw = pubRes.data?.data || [];
+      // Deduplicate: exclude sets already in my
+      const pub = pubRaw.filter(
+        (ps) => !my.some((ms) => Number(ms.set_id) === Number(ps.set_id))
+      );
+
+      setMySets(my);
+      setPublicSets(pub);
+
+      if (my.length > 0) {
+        setAssignForm((prev) => ({...prev, set_id: String(my[0].set_id)}));
+      } else if (pub.length > 0) {
+        setAssignForm((prev) => ({...prev, set_id: String(pub[0].set_id)}));
       }
-    } catch {
-      setAvailableSets([]);
+    } catch (err) {
+      setSetsError(getErrorMessage(err) || "Không thể tải danh sách bộ học.");
+    } finally {
+      setSetsLoading(false);
     }
   };
 
@@ -152,9 +226,71 @@ export default function ClassDetailPage() {
       setShowAssignModal(false);
       fetchAllData();
     } catch (err) {
-      setAssignError(getErrorMessage(err) || "Không thể giao bài tập.");
+      const msg = getErrorMessage(err);
+      if (assignForm.mode === "ALL" && msg.includes("Data truncated")) {
+        setAssignError(
+          "Chế độ 'Tất cả' yêu cầu cập nhật cơ sở dữ liệu (Database migration: ALTER TABLE assignments MODIFY COLUMN mode ENUM('FLASHCARDS','LEARN','TEST','MATCH','ALL')). Vui lòng chạy lệnh SQL trên database."
+        );
+      } else {
+        setAssignError(msg || "Không thể giao bài tập.");
+      }
     } finally {
       setAssignLoading(false);
+    }
+  };
+
+  const handleOpenEditAssign = (assignment) => {
+    let localDeadline = "";
+    if (assignment.deadline) {
+      const d = new Date(assignment.deadline);
+      if (!isNaN(d.getTime())) {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        const hours = String(d.getHours()).padStart(2, "0");
+        const minutes = String(d.getMinutes()).padStart(2, "0");
+        localDeadline = `${year}-${month}-${day}T${hours}:${minutes}`;
+      }
+    }
+    setEditAssignForm({
+      title: assignment.title || "",
+      description: assignment.description || "",
+      mode: assignment.mode || "LEARN",
+      deadline: localDeadline,
+    });
+    setEditAssignError("");
+    setEditAssignModal(assignment);
+  };
+
+  const handleUpdateAssignment = async (e) => {
+    e.preventDefault();
+    if (!editAssignForm.title.trim()) {
+      setEditAssignError("Vui lòng nhập tiêu đề bài tập.");
+      return;
+    }
+
+    setEditAssignLoading(true);
+    setEditAssignError("");
+    try {
+      await api.patch(`/assignments/${editAssignModal.assignment_id}`, {
+        title: editAssignForm.title.trim(),
+        description: editAssignForm.description.trim() || null,
+        mode: editAssignForm.mode,
+        deadline: editAssignForm.deadline || null,
+      });
+      setEditAssignModal(null);
+      fetchAllData();
+    } catch (err) {
+      const msg = getErrorMessage(err);
+      if (editAssignForm.mode === "ALL" && msg.includes("Data truncated")) {
+        setEditAssignError(
+          "Chế độ 'Tất cả' yêu cầu cập nhật cơ sở dữ liệu (Database migration). Vui lòng chạy lệnh: ALTER TABLE assignments MODIFY COLUMN mode ENUM('FLASHCARDS','LEARN','TEST','MATCH','ALL') NOT NULL DEFAULT 'TEST';"
+        );
+      } else {
+        setEditAssignError(msg || "Không thể cập nhật bài tập.");
+      }
+    } finally {
+      setEditAssignLoading(false);
     }
   };
 
@@ -223,6 +359,59 @@ export default function ClassDetailPage() {
       minute: "2-digit",
     });
     return {formatted, isPast};
+  };
+
+  const handleStartAssignment = async (a) => {
+    if (a.mode === "ALL") {
+      setDetailModalAssignment(a);
+      return;
+    }
+    setStartingAssignId(a.assignment_id);
+    try {
+      const res = await assignmentService.startAssignment(a.assignment_id);
+      setSubmissions((prev) => ({
+        ...prev,
+        [a.assignment_id]: res,
+      }));
+      const modeInfo = MODE_MAP[a.mode] || MODE_MAP.LEARN;
+      navigate(
+        `/study-sets/${a.set_id}/${modeInfo.path}?assignmentId=${a.assignment_id}&classId=${classId}`
+      );
+    } catch (err) {
+      alert(getErrorMessage(err) || "Không thể bắt đầu bài tập.");
+    } finally {
+      setStartingAssignId(null);
+    }
+  };
+
+  const handleStartAssignmentWithMode = async (a, chosenModeKey) => {
+    setStartingAssignId(a.assignment_id);
+    try {
+      const res = await assignmentService.startAssignment(a.assignment_id);
+      setSubmissions((prev) => ({
+        ...prev,
+        [a.assignment_id]: res,
+      }));
+      const chosenMode = MODE_MAP[chosenModeKey] || MODE_MAP.LEARN;
+      navigate(
+        `/study-sets/${a.set_id}/${chosenMode.path}?assignmentId=${a.assignment_id}&classId=${classId}`
+      );
+    } catch (err) {
+      alert(getErrorMessage(err) || "Không thể bắt đầu bài tập.");
+    } finally {
+      setStartingAssignId(null);
+    }
+  };
+
+  const handleContinueAssignment = (a) => {
+    if (a.mode === "ALL") {
+      setDetailModalAssignment(a);
+      return;
+    }
+    const modeInfo = MODE_MAP[a.mode] || MODE_MAP.LEARN;
+    navigate(
+      `/study-sets/${a.set_id}/${modeInfo.path}?assignmentId=${a.assignment_id}&classId=${classId}`
+    );
   };
 
   if (loading) {
@@ -397,9 +586,43 @@ export default function ClassDetailPage() {
                       )}
                     </div>
 
-                    <h3 className="assignment-title">{a.title}</h3>
+                    <h3
+                      className="assignment-title"
+                      style={{cursor: "pointer"}}
+                      onClick={() => setDetailModalAssignment(a)}
+                      title="Xem chi tiết bài tập"
+                    >
+                      {a.title}
+                    </h3>
                     {a.description && (
                       <p className="assignment-desc">{a.description}</p>
+                    )}
+
+                    {/* Student Status Badge */}
+                    {!isTeacher && (
+                      <div className="assignment-student-status">
+                        {submissionsLoading ? (
+                          <span className="submission-badge loading">
+                            Đang tải trạng thái...
+                          </span>
+                        ) : submissions[a.assignment_id]?.status === "COMPLETED" ? (
+                          <span className="submission-badge completed">
+                            🟢 Đã hoàn thành{a.mode === "TEST" && submissions[a.assignment_id]?.score !== null ? ` · ${submissions[a.assignment_id]?.score}%` : ""}
+                          </span>
+                        ) : submissions[a.assignment_id]?.status === "IN_PROGRESS" ? (
+                          <span className="submission-badge in-progress">
+                            🟡 Đang làm
+                          </span>
+                        ) : submissions[a.assignment_id]?.status === "OVERDUE" ? (
+                          <span className="submission-badge overdue">
+                            🔴 Quá hạn
+                          </span>
+                        ) : (
+                          <span className="submission-badge not-started">
+                            ⚪ Chưa làm
+                          </span>
+                        )}
+                      </div>
                     )}
 
                     <div className="assignment-set-info">
@@ -413,23 +636,91 @@ export default function ClassDetailPage() {
                     </div>
 
                     <div className="assignment-card-footer">
-                      <Link
-                        className="button-small button-primary"
-                        to={`/study-sets/${a.set_id}/${modeInfo.path}`}
-                      >
-                        Học ngay →
-                      </Link>
+                      {!isTeacher ? (
+                        <>
+                          <button
+                            className="button-small button-outline"
+                            onClick={() => setDetailModalAssignment(a)}
+                          >
+                            Chi tiết
+                          </button>
 
-                      {isTeacher && (
-                        <button
-                          className="button-small button-outline button-delete"
-                          onClick={() =>
-                            handleDeleteAssignment(a.assignment_id)
-                          }
-                          title="Xóa bài tập này"
-                        >
-                          🗑 Xóa
-                        </button>
+                          {submissions[a.assignment_id]?.status === "COMPLETED" ? (
+                            a.mode === "TEST" && submissions[a.assignment_id]?.result_id ? (
+                              <Link
+                                className="button-small button-primary"
+                                to={`/study-sets/${a.set_id}/test-review/${submissions[a.assignment_id]?.result_id}`}
+                              >
+                                Xem kết quả
+                              </Link>
+                            ) : (
+                              <span className="assignment-completed-label">
+                                ✓ Đã hoàn thành
+                              </span>
+                            )
+                          ) : submissions[a.assignment_id]?.status === "IN_PROGRESS" ? (
+                            <button
+                              className="button-small button-primary"
+                              onClick={() => handleContinueAssignment(a)}
+                            >
+                              Tiếp tục làm bài
+                            </button>
+                          ) : submissions[a.assignment_id]?.status === "OVERDUE" ? (
+                            <button className="button-small button-disabled" disabled>
+                              Đã hết hạn
+                            </button>
+                          ) : (
+                            <button
+                              className="button-small button-primary"
+                              disabled={startingAssignId === a.assignment_id}
+                              onClick={() => handleStartAssignment(a)}
+                            >
+                              {startingAssignId === a.assignment_id
+                                ? "Đang bắt đầu..."
+                                : a.mode === "ALL"
+                                ? "🌟 Làm bài tập"
+                                : "Bắt đầu làm bài"}
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <Link
+                            className="button-small button-primary"
+                            to={`/classes/${classId}/assignments/${a.assignment_id}/gradebook`}
+                            title="Xem bảng điểm bài tập này"
+                          >
+                            📊 Bảng điểm
+                          </Link>
+                          <button
+                            className="button-small button-outline"
+                            onClick={() => setDetailModalAssignment(a)}
+                          >
+                            Chi tiết
+                          </button>
+                          <button
+                            className="button-small button-outline button-edit"
+                            onClick={() => handleOpenEditAssign(a)}
+                            title="Sửa bài tập này"
+                          >
+                            ✏️ Sửa
+                          </button>
+                          <Link
+                            className="button-small button-outline"
+                            to={a.mode === "ALL" ? `/study-sets/${a.set_id}` : `/study-sets/${a.set_id}/${modeInfo.path}`}
+                          >
+                            Xem bộ học →
+                          </Link>
+                          <button
+                            className="button-small button-outline button-delete"
+                            onClick={() =>
+                              handleDeleteAssignment(a.assignment_id)
+                            }
+                            title="Xóa bài tập này"
+                          >
+                            🗑 Xóa
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -518,32 +809,56 @@ export default function ClassDetailPage() {
               </div>
             )}
 
-            <form onSubmit={handleCreateAssignment}>
-              <div className="form-group">
-                <label>Chọn bộ học (Study Set) *</label>
-                {availableSets.length === 0 ? (
-                  <p className="muted" style={{fontSize: "0.9rem"}}>
-                    Bạn chưa có bộ học nào. Hãy tạo bộ học trong Thư viện trước khi giao bài.
-                  </p>
+            <form onSubmit={handleCreateAssignment} className="modal-form">
+              <div className="modal-form-group">
+                <label htmlFor="assign-set-select">Chọn bộ học (Study Set) *</label>
+                {setsLoading ? (
+                  <div className="modal-form-loading">⏳ Đang tải danh sách bộ học...</div>
+                ) : setsError ? (
+                  <div className="form-error">{setsError}</div>
+                ) : mySets.length === 0 && publicSets.length === 0 ? (
+                  <div className="modal-form-empty">
+                    <p>Bạn chưa có bộ học nào và chưa có bộ học công khai.</p>
+                    <Link to="/study-sets/create" className="button-small button-outline">
+                      + Tạo bộ học mới
+                    </Link>
+                  </div>
                 ) : (
                   <select
+                    id="assign-set-select"
                     value={assignForm.set_id}
                     onChange={(e) =>
                       setAssignForm({...assignForm, set_id: e.target.value})
                     }
+                    required
                   >
-                    {availableSets.map((s) => (
-                      <option key={s.set_id} value={s.set_id}>
-                        {s.title} ({s.card_count || 0} thẻ)
-                      </option>
-                    ))}
+                    <option value="" disabled>-- Chọn một bộ học --</option>
+                    {mySets.length > 0 && (
+                      <optgroup label="📁 Bộ học của tôi">
+                        {mySets.map((s) => (
+                          <option key={`my-${s.set_id}`} value={s.set_id}>
+                            {s.title} ({s.card_count || 0} thẻ)
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {publicSets.length > 0 && (
+                      <optgroup label="🌐 Bộ học công khai">
+                        {publicSets.map((s) => (
+                          <option key={`pub-${s.set_id}`} value={s.set_id}>
+                            {s.title} ({s.card_count || 0} thẻ)
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
                 )}
               </div>
 
-              <div className="form-group">
-                <label>Tiêu đề bài tập *</label>
+              <div className="modal-form-group">
+                <label htmlFor="assign-title">Tiêu đề bài tập *</label>
                 <input
+                  id="assign-title"
                   type="text"
                   placeholder="Ví dụ: Ôn tập từ vựng Unit 1"
                   value={assignForm.title}
@@ -554,10 +869,11 @@ export default function ClassDetailPage() {
                 />
               </div>
 
-              <div className="form-group">
-                <label>Mô tả / Hướng dẫn bài tập</label>
+              <div className="modal-form-group">
+                <label htmlFor="assign-description">Mô tả / Hướng dẫn bài tập</label>
                 <textarea
-                  rows="2"
+                  id="assign-description"
+                  rows="3"
                   placeholder="Nhập hướng dẫn cho học sinh (tùy chọn)..."
                   value={assignForm.description}
                   onChange={(e) =>
@@ -566,37 +882,56 @@ export default function ClassDetailPage() {
                 />
               </div>
 
-              <div className="form-group">
+              <div className="modal-form-group">
                 <label>Chế độ học (Mode) *</label>
-                <div className="mode-selection-grid">
-                  {Object.entries(MODE_MAP).map(([modeKey, info]) => (
-                    <button
-                      key={modeKey}
-                      type="button"
-                      className={`mode-select-chip ${
-                        assignForm.mode === modeKey ? "selected" : ""
-                      }`}
-                      onClick={() =>
-                        setAssignForm({...assignForm, mode: modeKey})
-                      }
-                    >
-                      <span className="mode-select-icon">{info.icon}</span>
-                      <span className="mode-select-label">{info.label}</span>
-                    </button>
-                  ))}
+                <div className="mode-selection-container">
+                  <button
+                    type="button"
+                    className={`mode-select-chip-all ${assignForm.mode === "ALL" ? "selected" : ""}`}
+                    onClick={() => setAssignForm({...assignForm, mode: "ALL"})}
+                  >
+                    <span className="mode-select-icon">🌟</span>
+                    <div className="mode-select-info">
+                      <span className="mode-select-title">Tất cả (ALL)</span>
+                      <span className="mode-select-desc">Học viên được tự do chọn Thẻ lật, Luyện tập, Kiểm tra hoặc Ghép thẻ</span>
+                    </div>
+                    {assignForm.mode === "ALL" && <span className="mode-check">✓</span>}
+                  </button>
+
+                  <div className="mode-subgrid">
+                    {["FLASHCARDS", "LEARN", "TEST", "MATCH"].map((modeKey) => {
+                      const info = MODE_MAP[modeKey];
+                      return (
+                        <button
+                          key={modeKey}
+                          type="button"
+                          className={`mode-select-chip ${
+                            assignForm.mode === modeKey ? "selected" : ""
+                          }`}
+                          onClick={() =>
+                            setAssignForm({...assignForm, mode: modeKey})
+                          }
+                        >
+                          <span className="mode-select-icon">{info.icon}</span>
+                          <span className="mode-select-label">{info.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
-              <div className="form-group">
-                <label>Hạn hoàn thành (Deadline)</label>
+              <div className="modal-form-group">
+                <label htmlFor="assign-deadline">Hạn hoàn thành (Deadline)</label>
                 <input
+                  id="assign-deadline"
                   type="datetime-local"
                   value={assignForm.deadline}
                   onChange={(e) =>
                     setAssignForm({...assignForm, deadline: e.target.value})
                   }
                 />
-                <small className="muted" style={{marginTop: "4px", display: "block"}}>
+                <small className="modal-form-help">
                   Để trống nếu không giới hạn thời gian nộp bài.
                 </small>
               </div>
@@ -613,7 +948,7 @@ export default function ClassDetailPage() {
                 <button
                   type="submit"
                   className="button-primary"
-                  disabled={assignLoading || availableSets.length === 0}
+                  disabled={assignLoading || (mySets.length === 0 && publicSets.length === 0)}
                 >
                   {assignLoading ? "Đang giao bài..." : "Giao bài ngay"}
                 </button>
@@ -643,11 +978,13 @@ export default function ClassDetailPage() {
               </div>
             )}
 
-            <form onSubmit={handleEditClassSubmit}>
-              <div className="form-group">
-                <label>Tên lớp học *</label>
+            <form onSubmit={handleEditClassSubmit} className="modal-form">
+              <div className="modal-form-group">
+                <label htmlFor="edit-class-name">Tên lớp học *</label>
                 <input
+                  id="edit-class-name"
                   type="text"
+                  placeholder="Nhập tên lớp học..."
                   value={editForm.name}
                   onChange={(e) =>
                     setEditForm({...editForm, name: e.target.value})
@@ -656,10 +993,12 @@ export default function ClassDetailPage() {
                 />
               </div>
 
-              <div className="form-group">
-                <label>Mô tả lớp học</label>
+              <div className="modal-form-group">
+                <label htmlFor="edit-class-desc">Mô tả lớp học</label>
                 <textarea
+                  id="edit-class-desc"
                   rows="3"
+                  placeholder="Nhập mô tả lớp học (tùy chọn)..."
                   value={editForm.description}
                   onChange={(e) =>
                     setEditForm({...editForm, description: e.target.value})
@@ -685,6 +1024,419 @@ export default function ClassDetailPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT ASSIGNMENT (TEACHER) */}
+      {editAssignModal && (
+        <div
+          className="modal-overlay"
+          onClick={() => setEditAssignModal(null)}
+        >
+          <div
+            className="modal-content modal-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h2>Sửa bài tập</h2>
+              <button
+                className="modal-close-btn"
+                onClick={() => setEditAssignModal(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            {editAssignError && (
+              <div className="form-error" style={{marginBottom: "16px"}}>
+                {editAssignError}
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateAssignment} className="modal-form">
+              <div className="modal-form-group">
+                <label>Bộ học (Study Set)</label>
+                <input
+                  type="text"
+                  value={`${editAssignModal.study_set_title || "Bộ học"} (${editAssignModal.card_count || 0} thẻ)`}
+                  disabled
+                  style={{background: "var(--paper)", cursor: "not-allowed", opacity: 0.85}}
+                />
+              </div>
+
+              <div className="modal-form-group">
+                <label htmlFor="edit-assign-title">Tiêu đề bài tập *</label>
+                <input
+                  id="edit-assign-title"
+                  type="text"
+                  placeholder="Ví dụ: Ôn tập từ vựng Unit 1"
+                  value={editAssignForm.title}
+                  onChange={(e) =>
+                    setEditAssignForm({...editAssignForm, title: e.target.value})
+                  }
+                  required
+                />
+              </div>
+
+              <div className="modal-form-group">
+                <label htmlFor="edit-assign-desc">Mô tả / Hướng dẫn bài tập</label>
+                <textarea
+                  id="edit-assign-desc"
+                  rows="3"
+                  placeholder="Nhập hướng dẫn cho học sinh (tùy chọn)..."
+                  value={editAssignForm.description}
+                  onChange={(e) =>
+                    setEditAssignForm({...editAssignForm, description: e.target.value})
+                  }
+                />
+              </div>
+
+              <div className="modal-form-group">
+                <label>Chế độ học (Mode) *</label>
+                <div className="mode-selection-container">
+                  <button
+                    type="button"
+                    className={`mode-select-chip-all ${editAssignForm.mode === "ALL" ? "selected" : ""}`}
+                    onClick={() => setEditAssignForm({...editAssignForm, mode: "ALL"})}
+                  >
+                    <span className="mode-select-icon">🌟</span>
+                    <div className="mode-select-info">
+                      <span className="mode-select-title">Tất cả (ALL)</span>
+                      <span className="mode-select-desc">Học viên được tự do chọn Thẻ lật, Luyện tập, Kiểm tra hoặc Ghép thẻ</span>
+                    </div>
+                    {editAssignForm.mode === "ALL" && <span className="mode-check">✓</span>}
+                  </button>
+
+                  <div className="mode-subgrid">
+                    {["FLASHCARDS", "LEARN", "TEST", "MATCH"].map((modeKey) => {
+                      const info = MODE_MAP[modeKey];
+                      return (
+                        <button
+                          key={modeKey}
+                          type="button"
+                          className={`mode-select-chip ${
+                            editAssignForm.mode === modeKey ? "selected" : ""
+                          }`}
+                          onClick={() =>
+                            setEditAssignForm({...editAssignForm, mode: modeKey})
+                          }
+                        >
+                          <span className="mode-select-icon">{info.icon}</span>
+                          <span className="mode-select-label">{info.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-form-group">
+                <label htmlFor="edit-assign-deadline">Hạn hoàn thành (Deadline)</label>
+                <input
+                  id="edit-assign-deadline"
+                  type="datetime-local"
+                  value={editAssignForm.deadline}
+                  onChange={(e) =>
+                    setEditAssignForm({...editAssignForm, deadline: e.target.value})
+                  }
+                />
+                <small className="modal-form-help">
+                  Để trống nếu không giới hạn thời gian nộp bài.
+                </small>
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="button-outline"
+                  onClick={() => setEditAssignModal(null)}
+                  disabled={editAssignLoading}
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="button-primary"
+                  disabled={editAssignLoading}
+                >
+                  {editAssignLoading ? "Đang lưu..." : "Lưu thay đổi"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ASSIGNMENT DETAIL */}
+      {detailModalAssignment && (
+        <div
+          className="modal-overlay"
+          onClick={() => setDetailModalAssignment(null)}
+        >
+          <div
+            className="modal-content assignment-detail-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h2>Chi tiết bài tập</h2>
+              <button
+                className="modal-close-btn"
+                onClick={() => setDetailModalAssignment(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="assignment-detail-modal-body">
+              <div className="detail-row">
+                <span className="detail-label">Tiêu đề:</span>
+                <span className="detail-value font-bold">
+                  {detailModalAssignment.title}
+                </span>
+              </div>
+
+              {detailModalAssignment.description && (
+                <div className="detail-row">
+                  <span className="detail-label">Mô tả:</span>
+                  <span className="detail-value">
+                    {detailModalAssignment.description}
+                  </span>
+                </div>
+              )}
+
+              <div className="detail-row">
+                <span className="detail-label">Lớp học:</span>
+                <span className="detail-value">{classData?.name}</span>
+              </div>
+
+              <div className="detail-row">
+                <span className="detail-label">Chế độ học:</span>
+                <span className="detail-value">
+                  {MODE_MAP[detailModalAssignment.mode]?.icon}{" "}
+                  {MODE_MAP[detailModalAssignment.mode]?.label}
+                </span>
+              </div>
+
+              <div className="detail-row">
+                <span className="detail-label">Bộ từ vựng:</span>
+                <span className="detail-value font-semibold">
+                  📚 {detailModalAssignment.study_set_title} (
+                  {detailModalAssignment.card_count} thẻ từ)
+                </span>
+              </div>
+
+              <div className="detail-row">
+                <span className="detail-label">Hạn hoàn thành:</span>
+                <span className="detail-value">
+                  {formatDeadline(detailModalAssignment.deadline)?.formatted ||
+                    "Không giới hạn"}
+                </span>
+              </div>
+
+              {!isTeacher && (
+                <>
+                  <hr className="detail-divider" />
+                  <div className="detail-row">
+                    <span className="detail-label">Trạng thái:</span>
+                    <span className="detail-value">
+                      {submissions[detailModalAssignment.assignment_id]
+                        ?.status === "COMPLETED" ? (
+                        <span className="submission-badge completed">
+                          🟢 Đã hoàn thành
+                          {detailModalAssignment.mode === "TEST" &&
+                          submissions[detailModalAssignment.assignment_id]
+                            ?.score !== null
+                            ? ` · ${
+                                submissions[
+                                  detailModalAssignment.assignment_id
+                                ]?.score
+                              }%`
+                            : ""}
+                        </span>
+                      ) : submissions[detailModalAssignment.assignment_id]
+                          ?.status === "IN_PROGRESS" ? (
+                        <span className="submission-badge in-progress">
+                          🟡 Đang làm
+                        </span>
+                      ) : submissions[detailModalAssignment.assignment_id]
+                          ?.status === "OVERDUE" ? (
+                        <span className="submission-badge overdue">
+                          🔴 Quá hạn
+                        </span>
+                      ) : (
+                        <span className="submission-badge not-started">
+                          ⚪ Chưa làm
+                        </span>
+                      )}
+                    </span>
+                  </div>
+
+                  {submissions[detailModalAssignment.assignment_id]?.score !==
+                    null &&
+                    submissions[detailModalAssignment.assignment_id]?.score !==
+                      undefined && (
+                      <div className="detail-row">
+                        <span className="detail-label">Điểm số:</span>
+                        <span className="detail-value font-bold text-green-700">
+                          {
+                            submissions[detailModalAssignment.assignment_id]
+                              ?.score
+                          }
+                          %
+                        </span>
+                      </div>
+                    )}
+
+                  {submissions[detailModalAssignment.assignment_id]
+                    ?.started_at && (
+                    <div className="detail-row">
+                      <span className="detail-label">Bắt đầu lúc:</span>
+                      <span className="detail-value">
+                        {formatDateTime(
+                          submissions[detailModalAssignment.assignment_id]
+                            ?.started_at,
+                        )}
+                      </span>
+                    </div>
+                  )}
+
+                  {submissions[detailModalAssignment.assignment_id]
+                    ?.submitted_at && (
+                    <div className="detail-row">
+                      <span className="detail-label">Nộp lúc:</span>
+                      <span className="detail-value">
+                        {formatDateTime(
+                          submissions[detailModalAssignment.assignment_id]
+                            ?.submitted_at,
+                        )}
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Student Mode Selector for ALL mode */}
+              {detailModalAssignment.mode === "ALL" && !isTeacher && (
+                <div className="student-mode-choice-section">
+                  <div className="student-mode-choice-title">
+                    🌟 Chọn chế độ bạn muốn học:
+                  </div>
+                  <div className="student-mode-choice-grid">
+                    {["FLASHCARDS", "LEARN", "TEST", "MATCH"].map((mKey) => {
+                      const mInfo = MODE_MAP[mKey];
+                      return (
+                        <button
+                          key={mKey}
+                          type="button"
+                          className="student-mode-choice-btn"
+                          disabled={startingAssignId === detailModalAssignment.assignment_id}
+                          onClick={() => {
+                            const a = detailModalAssignment;
+                            setDetailModalAssignment(null);
+                            handleStartAssignmentWithMode(a, mKey);
+                          }}
+                        >
+                          <span>{mInfo.icon}</span>
+                          <span>{mInfo.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="modal-actions" style={{marginTop: "20px"}}>
+              <button
+                type="button"
+                className="button-outline"
+                onClick={() => setDetailModalAssignment(null)}
+              >
+                Đóng
+              </button>
+
+              {!isTeacher && (
+                submissions[detailModalAssignment.assignment_id]?.status ===
+                "COMPLETED" ? (
+                  detailModalAssignment.mode === "TEST" &&
+                  submissions[detailModalAssignment.assignment_id]?.result_id ? (
+                    <Link
+                      className="button-primary"
+                      to={`/study-sets/${detailModalAssignment.set_id}/test-review/${submissions[detailModalAssignment.assignment_id]?.result_id}`}
+                    >
+                      Xem kết quả bài kiểm tra
+                    </Link>
+                  ) : null
+                ) : submissions[detailModalAssignment.assignment_id]?.status ===
+                  "IN_PROGRESS" ? (
+                  detailModalAssignment.mode === "ALL" ? null : (
+                    <button
+                      type="button"
+                      className="button-primary"
+                      onClick={() => {
+                        const a = detailModalAssignment;
+                        setDetailModalAssignment(null);
+                        handleContinueAssignment(a);
+                      }}
+                    >
+                      Tiếp tục làm bài
+                    </button>
+                  )
+                ) : submissions[detailModalAssignment.assignment_id]?.status ===
+                  "OVERDUE" ? (
+                  <button
+                    type="button"
+                    className="button-disabled"
+                    disabled
+                  >
+                    Đã quá hạn
+                  </button>
+                ) : (
+                  detailModalAssignment.mode === "ALL" ? null : (
+                    <button
+                      type="button"
+                      className="button-primary"
+                      disabled={
+                        startingAssignId === detailModalAssignment.assignment_id
+                      }
+                      onClick={() => {
+                        const a = detailModalAssignment;
+                        setDetailModalAssignment(null);
+                        handleStartAssignment(a);
+                      }}
+                    >
+                      {startingAssignId === detailModalAssignment.assignment_id
+                        ? "Đang bắt đầu..."
+                        : "Bắt đầu làm bài"}
+                    </button>
+                  )
+                )
+              )}
+
+              {isTeacher && (
+                <>
+                  <button
+                    type="button"
+                    className="button-outline button-edit"
+                    onClick={() => {
+                      const a = detailModalAssignment;
+                      setDetailModalAssignment(null);
+                      handleOpenEditAssign(a);
+                    }}
+                  >
+                    ✏️ Sửa bài tập
+                  </button>
+                  <Link
+                    className="button-primary"
+                    to={`/classes/${classId}/assignments/${detailModalAssignment.assignment_id}/gradebook`}
+                    onClick={() => setDetailModalAssignment(null)}
+                  >
+                    📊 Xem bảng điểm
+                  </Link>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}

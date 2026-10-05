@@ -164,7 +164,7 @@ const removeMember = async (classId, userId) => {
 const getClassMembers = async (classId) => {
   const [rows] = await pool.execute(
     `SELECT cm.class_id, cm.user_id, cm.member_role, cm.joined_at,
-            u.username, u.full_name, u.avatar_url
+            u.username, u.full_name, u.avatar_url, u.email
      FROM class_members cm
      INNER JOIN users u ON u.user_id = cm.user_id
      WHERE cm.class_id = ?

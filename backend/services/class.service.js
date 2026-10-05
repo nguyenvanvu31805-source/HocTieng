@@ -217,6 +217,39 @@ const leaveClass = async (classIdValue, user) => {
   return {message: "Đã rời lớp học thành công."};
 };
 
+const removeMember = async (classIdValue, targetUserIdValue, user) => {
+  const userId = await requireActiveUser(user);
+  const classId = parsePositiveId(classIdValue, "classId");
+  const targetUserId = parsePositiveId(targetUserIdValue, "userId");
+
+  const classData = await classRepository.findById(classId);
+  if (!classData) {
+    throw new AppError("Không tìm thấy lớp.", 404);
+  }
+
+  const isTeacher = Number(classData.teacher_id) === userId;
+  const isAdmin = user.role === "ADMIN";
+
+  if (!isTeacher && !isAdmin) {
+    throw new AppError(
+      "Chỉ giáo viên sở hữu lớp mới có thể xóa thành viên khỏi lớp.",
+      403,
+    );
+  }
+
+  if (targetUserId === Number(classData.teacher_id)) {
+    throw new AppError("Không thể xóa giáo viên chủ nhiệm khỏi lớp.", 400);
+  }
+
+  const member = await classRepository.findMember(classId, targetUserId);
+  if (!member) {
+    throw new AppError("Học viên không tồn tại trong lớp học này.", 404);
+  }
+
+  await classRepository.removeMember(classId, targetUserId);
+  return {message: "Đã xóa học viên khỏi lớp thành công."};
+};
+
 module.exports = {
   createClass,
   getMyClasses,
@@ -225,4 +258,5 @@ module.exports = {
   joinClass,
   getClassMembers,
   leaveClass,
+  removeMember,
 };

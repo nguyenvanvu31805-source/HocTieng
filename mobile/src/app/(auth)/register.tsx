@@ -18,6 +18,7 @@ import api from '@/services/api';
 export default function RegisterScreen() {
   const router = useRouter();
 
+  const [role, setRole] = useState<'STUDENT' | 'TEACHER'>('STUDENT');
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -39,6 +40,11 @@ export default function RegisterScreen() {
     const trimmedFullName = fullName.trim();
     const trimmedUsername = username.trim();
     const trimmedEmail = email.trim();
+
+    if (!role || (role !== 'STUDENT' && role !== 'TEACHER')) {
+      setErrorMessage('Vui lòng chọn vai trò: Học viên hoặc Giáo viên.');
+      return;
+    }
 
     if (!trimmedUsername) {
       setErrorMessage('Vui lòng nhập tên người dùng (username).');
@@ -84,17 +90,17 @@ export default function RegisterScreen() {
     try {
       setLoading(true);
 
-      // 2. Gửi request POST tới Backend /api/auth/register
+      // 2. Gửi request POST tới Backend /api/auth/register kèm role
       const response = await api.post<User>('/auth/register', {
         username: trimmedUsername,
         email: trimmedEmail,
         password: password,
         full_name: trimmedFullName || trimmedUsername,
+        role: role,
       });
 
       if (response.success) {
         setSuccessMessage('Đăng ký tài khoản thành công! Đang chuyển về Đăng nhập...');
-        // Đợi 1.5 giây để người dùng nhìn thấy thông báo thành công trước khi chuyển màn hình
         setTimeout(() => {
           router.replace('/(auth)/login' as any);
         }, 1500);
@@ -148,6 +154,66 @@ export default function RegisterScreen() {
                 <Text style={styles.successText}>{successMessage}</Text>
               </View>
             )}
+
+            {/* Chọn vai trò (Role Selector) */}
+            <View style={styles.roleContainer}>
+              <Text style={styles.roleLabel}>Bạn là? *</Text>
+              <View style={styles.roleOptions}>
+                <TouchableOpacity
+                  style={[
+                    styles.roleOptionCard,
+                    role === 'STUDENT' && styles.roleOptionCardSelected,
+                  ]}
+                  onPress={() => {
+                    setRole('STUDENT');
+                    if (errorMessage) setErrorMessage('');
+                  }}
+                  activeOpacity={0.7}
+                  disabled={loading || !!successMessage}>
+                  <Text
+                    style={[
+                      styles.roleOptionTitle,
+                      role === 'STUDENT' && styles.roleOptionTitleSelected,
+                    ]}>
+                    Học viên
+                  </Text>
+                  <Text
+                    style={[
+                      styles.roleOptionSubtitle,
+                      role === 'STUDENT' && styles.roleOptionSubtitleSelected,
+                    ]}>
+                    Học và luyện tập
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.roleOptionCard,
+                    role === 'TEACHER' && styles.roleOptionCardSelected,
+                  ]}
+                  onPress={() => {
+                    setRole('TEACHER');
+                    if (errorMessage) setErrorMessage('');
+                  }}
+                  activeOpacity={0.7}
+                  disabled={loading || !!successMessage}>
+                  <Text
+                    style={[
+                      styles.roleOptionTitle,
+                      role === 'TEACHER' && styles.roleOptionTitleSelected,
+                    ]}>
+                    Giáo viên
+                  </Text>
+                  <Text
+                    style={[
+                      styles.roleOptionSubtitle,
+                      role === 'TEACHER' && styles.roleOptionSubtitleSelected,
+                    ]}>
+                    Quản lý lớp học
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
 
             {/* Họ và tên */}
             <View style={styles.inputGroup}>
@@ -222,8 +288,8 @@ export default function RegisterScreen() {
                 />
                 <TouchableOpacity
                   style={styles.eyeButton}
-                  onPress={() => setShowPassword((prev) => !prev)}
-                  activeOpacity={0.7}>
+                  onPress={() => setShowPassword(!showPassword)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                   <Text style={styles.eyeText}>{showPassword ? 'Ẩn' : 'Hiện'}</Text>
                 </TouchableOpacity>
               </View>
@@ -249,30 +315,31 @@ export default function RegisterScreen() {
                 />
                 <TouchableOpacity
                   style={styles.eyeButton}
-                  onPress={() => setShowConfirmPassword((prev) => !prev)}
-                  activeOpacity={0.7}>
-                  <Text style={styles.eyeText}>{showConfirmPassword ? 'Ẩn' : 'Hiện'}</Text>
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Text style={styles.eyeText}>
+                    {showConfirmPassword ? 'Ẩn' : 'Hiện'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
 
             {/* Nút Đăng ký */}
             <TouchableOpacity
-              style={[
-                styles.submitButton,
-                (loading || !!successMessage) && styles.submitButtonDisabled,
-              ]}
+              style={[styles.submitButton, loading && styles.submitButtonDisabled]}
               onPress={handleRegister}
               disabled={loading || !!successMessage}
               activeOpacity={0.8}>
               {loading ? (
-                <ActivityIndicator color="#ffffff" size="small" />
+                <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
-                <Text style={styles.submitButtonText}>Đăng ký tài khoản</Text>
+                <Text style={styles.submitButtonText}>
+                  {role === 'TEACHER' ? 'Đăng ký Giáo viên' : 'Đăng ký Học viên'}
+                </Text>
               )}
             </TouchableOpacity>
 
-            {/* Link chuyển sang Đăng nhập */}
+            {/* Chuyển hướng về Login */}
             <View style={styles.loginContainer}>
               <Text style={styles.loginPrompt}>Đã có tài khoản? </Text>
               <TouchableOpacity
@@ -297,86 +364,132 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
     paddingHorizontal: 24,
-    paddingVertical: 28,
+    paddingTop: 20,
+    paddingBottom: 40,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   logoBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
+    width: 56,
+    height: 56,
+    borderRadius: 16,
     backgroundColor: '#4255FF',
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 10,
     shadowColor: '#4255FF',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
   },
   logoBadgeText: {
     color: '#FFFFFF',
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '800',
     letterSpacing: 1,
   },
   brandTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#2E3856',
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  welcomeTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#303545',
-    marginBottom: 4,
+    color: '#2E3856',
+    letterSpacing: 0.5,
+  },
+  welcomeTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#2E3856',
+    marginTop: 12,
+    marginBottom: 6,
   },
   welcomeSubtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#60646C',
     textAlign: 'center',
+    lineHeight: 20,
     paddingHorizontal: 16,
-    lineHeight: 18,
   },
   formContainer: {
-    width: '100%',
+    marginTop: 6,
   },
-  errorContainer: {
-    backgroundColor: '#FFEBEA',
-    borderWidth: 1,
-    borderColor: '#FF4D4F',
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+  roleContainer: {
     marginBottom: 16,
   },
-  errorText: {
-    color: '#D93025',
+  roleLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2E3856',
+    marginBottom: 8,
+  },
+  roleOptions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  roleOptionCard: {
+    flex: 1,
+    backgroundColor: '#F6F7FB',
+    borderWidth: 1.5,
+    borderColor: '#E0E1E6',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  roleOptionCardSelected: {
+    borderColor: '#4255FF',
+    backgroundColor: '#EEF1FF',
+  },
+  roleOptionTitle: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '700',
+    color: '#2E3856',
+    marginBottom: 2,
+  },
+  roleOptionTitleSelected: {
+    color: '#4255FF',
+  },
+  roleOptionSubtitle: {
+    fontSize: 11,
+    color: '#939BB4',
     textAlign: 'center',
   },
-  successContainer: {
-    backgroundColor: '#E6F9F0',
+  roleOptionSubtitleSelected: {
+    color: '#4255FF',
+    fontWeight: '500',
+  },
+  errorContainer: {
+    backgroundColor: '#FDE8E8',
+    borderColor: '#F98080',
     borderWidth: 1,
-    borderColor: '#23C16B',
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 14,
-    marginBottom: 16,
+    marginBottom: 14,
+  },
+  errorText: {
+    color: '#E02424',
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
+  },
+  successContainer: {
+    backgroundColor: '#DEF7EC',
+    borderColor: '#31C48D',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 14,
   },
   successText: {
-    color: '#15803D',
-    fontSize: 14,
-    fontWeight: '600',
+    color: '#03543F',
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
     textAlign: 'center',
   },
   inputGroup: {

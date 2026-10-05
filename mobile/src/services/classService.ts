@@ -85,6 +85,37 @@ export const classService = {
     }
     throw new Error(response.message || 'Không thể tạo lớp học.');
   },
+
+  /**
+   * Cập nhật thông tin lớp học (dành cho Giáo viên chủ lớp)
+   * Endpoint: PATCH /classes/:classId
+   */
+  async updateClass(
+    classId: string | number,
+    payload: { name: string; description?: string | null }
+  ): Promise<ClassDetail> {
+    const response = await api.patch<ClassDetail>(`/classes/${classId}`, payload);
+    if (response.success && response.data) {
+      return response.data;
+    }
+    throw new Error(response.message || 'Không thể cập nhật lớp học.');
+  },
+
+  /**
+   * Giáo viên xóa học sinh khỏi lớp
+   * Endpoint: DELETE /classes/:classId/members/:userId
+   */
+  async removeMember(
+    classId: string | number,
+    userId: string | number
+  ): Promise<{ message: string }> {
+    const response = await api.delete<{ message: string }>(
+      `/classes/${classId}/members/${userId}`
+    );
+    return {
+      message: response.data?.message || response.message || 'Đã xóa học viên khỏi lớp thành công.',
+    };
+  },
 };
 
 export default classService;

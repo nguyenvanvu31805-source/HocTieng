@@ -19,14 +19,14 @@ export default function LoginPage() {
   return (
     <div className="auth-page">
       <div className="auth-art">
-        <span className="wordmark-mark">L</span>
-        <p className="eyebrow">QUAY LẠI VỚI TỪ VỰNG</p>
+        <span className="wordmark-mark">🌱</span>
+        <p className="eyebrow">QUAY LẠI VỚI QUIZLETCLONE</p>
         <h1>
           Tiếp tục
           <br />
-          <em>từ nơi bạn dừng lại.</em>
+          <em>học tập và phát triển.</em>
         </h1>
-        <p>Phiên học ngắn, tiến bộ rõ ràng và một cách học nhẹ nhàng hơn.</p>
+        <p>Phiên học ngắn, tiến bộ thực tế và củng cố phản xạ từ vựng mỗi ngày.</p>
       </div>
       <div className="auth-card">
         <p className="eyebrow">CHÀO MỪNG TRỞ LẠI</p>

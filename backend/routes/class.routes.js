@@ -47,4 +47,10 @@ router.delete(
   asyncHandler(classController.leaveClass),
 );
 
+router.delete(
+  "/classes/:classId/members/:userId",
+  authenticate,
+  asyncHandler(classController.removeMember),
+);
+
 module.exports = router;
